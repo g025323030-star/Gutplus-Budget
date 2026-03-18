@@ -1,0 +1,72 @@
+name: "🔹 Sub-Task"
+description: "משימת משנה (Sub-Issue) בפרויקט GutPlus Budget"
+title: "[TASK-XXx] "
+labels: []
+body:
+  - type: markdown
+    attributes:
+      value: |
+        ## משימת משנה — GutPlus Budget
+        משימת משנה השייכת למשימה עיקרית (Parent Task).
+
+  - type: input
+    id: sub-task-id
+    attributes:
+      label: "Sub-Task ID"
+      description: "מזהה משימת המשנה (לדוגמה: TASK-01a)"
+      placeholder: "TASK-01a"
+    validations:
+      required: true
+
+  - type: input
+    id: parent-task
+    attributes:
+      label: "Parent Task"
+      description: "מזהה המשימה הראשית (לדוגמה: TASK-01) — הוסיפו קישור ל-Issue אם קיים"
+      placeholder: "TASK-01 (#1)"
+    validations:
+      required: true
+
+  - type: textarea
+    id: description
+    attributes:
+      label: "תיאור"
+      description: "תיאור מפורט של משימת המשנה"
+      placeholder: "תארו בפירוט מה צריך לבצע..."
+    validations:
+      required: true
+
+  - type: dropdown
+    id: estimate
+    attributes:
+      label: "אומדן זמן"
+      description: "זמן מוערך לביצוע"
+      options:
+        - "2 שעות"
+        - "חצי יום"
+        - "יום"
+        - "יום וחצי"
+        - "יומיים"
+        - "3 ימים"
+        - "4 ימים"
+        - "5 ימים"
+    validations:
+      required: true
+
+  - type: input
+    id: dependencies
+    attributes:
+      label: "תלויות"
+      description: "משימות שצריכות להסתיים לפני"
+      placeholder: "TASK-01a"
+    validations:
+      required: false
+
+  - type: textarea
+    id: dod
+    attributes:
+      label: "Definition of Done"
+      description: "מה צריך לקרות כדי שמשימת המשנה תיחשב סגורה"
+      placeholder: "המשימה הושלמה כאשר..."
+    validations:
+      required: true

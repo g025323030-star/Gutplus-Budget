@@ -1,0 +1,122 @@
+name: "🔧 Task"
+description: "משימה עיקרית בפרויקט GutPlus Budget"
+title: "[TASK-XX] "
+labels: []
+body:
+  - type: markdown
+    attributes:
+      value: |
+        ## משימה חדשה — GutPlus Budget
+        מלאו את הפרטים הבאים ליצירת משימה.
+
+  - type: input
+    id: task-id
+    attributes:
+      label: "Task ID"
+      description: "מזהה המשימה (לדוגמה: TASK-01)"
+      placeholder: "TASK-01"
+    validations:
+      required: true
+
+  - type: textarea
+    id: description
+    attributes:
+      label: "תיאור המשימה"
+      description: "תיאור מפורט של מה צריך לבצע"
+      placeholder: "תארו את המשימה בפירוט..."
+    validations:
+      required: true
+
+  - type: dropdown
+    id: milestone
+    attributes:
+      label: "Milestone"
+      description: "לאיזה Milestone המשימה שייכת"
+      options:
+        - "M1 — תשתית (18.3–31.3)"
+        - "M2 — ליבת המערכת (1.4–29.4)"
+        - "M3 — Admin + אקסלים (30.4–20.5)"
+        - "M4 — Dashboard (21.5–17.6)"
+        - "Backlog — Phase 2+"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: priority
+    attributes:
+      label: "Priority"
+      description: "עדיפות המשימה"
+      options:
+        - "P0 — Critical"
+        - "P1 — High"
+        - "P2 — Medium"
+        - "P3 — Low"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: estimate
+    attributes:
+      label: "אומדן זמן"
+      description: "זמן מוערך לביצוע"
+      options:
+        - "2 שעות"
+        - "חצי יום"
+        - "יום"
+        - "יום וחצי"
+        - "יומיים"
+        - "3 ימים"
+        - "4 ימים"
+        - "5 ימים"
+        - "שבוע (5 ימים)"
+        - "8 ימים"
+        - "10 ימים"
+    validations:
+      required: true
+
+  - type: input
+    id: dependencies
+    attributes:
+      label: "תלויות"
+      description: "משימות שצריכות להסתיים לפני (לדוגמה: TASK-01, TASK-02)"
+      placeholder: "TASK-01, TASK-02"
+    validations:
+      required: false
+
+  - type: input
+    id: fr-nfr
+    attributes:
+      label: "FR/NFR קשורים"
+      description: "דרישות פונקציונליות/לא-פונקציונליות מהאפיון"
+      placeholder: "FR-001, NFR-010"
+    validations:
+      required: false
+
+  - type: input
+    id: target-date
+    attributes:
+      label: "תאריך יעד"
+      description: "תאריך סיום מתוכנן"
+      placeholder: "DD.MM.YYYY"
+    validations:
+      required: false
+
+  - type: textarea
+    id: sub-issues
+    attributes:
+      label: "Sub-Issues"
+      description: "רשימת משימות משנה (אם יש)"
+      placeholder: |
+        - [ ] TASK-XXa: תיאור
+        - [ ] TASK-XXb: תיאור
+    validations:
+      required: false
+
+  - type: textarea
+    id: dod
+    attributes:
+      label: "Definition of Done"
+      description: "מה צריך לקרות כדי שהמשימה תיחשב סגורה"
+      placeholder: "המשימה הושלמה כאשר..."
+    validations:
+      required: true
