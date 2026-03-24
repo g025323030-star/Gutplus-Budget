@@ -1,0 +1,11 @@
+# Environment variables — do NOT commit secrets
+.env
+
+# PostgreSQL data volume (if mounted locally)
+pgdata/
+
+# OS & editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
