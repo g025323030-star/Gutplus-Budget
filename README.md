@@ -30,10 +30,10 @@ docker-compose up -d
 docker-compose ps
 ```
 
-התחבר ל-DB מה-CLI:
+התחבר ל-DB מה-CLI (באמצעות הערכים שהוגדרו בקובץ `.env`):
 
 ```bash
-docker-compose exec db psql -U gutplus_user -d gutplus_budget
+docker-compose exec db psql -U "$POSTGRES_USER" -d "$POSTGRES_DB"
 ```
 
 ### 4. עצירת הסביבה
