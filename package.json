@@ -1,0 +1,26 @@
+{
+  "name": "gutplus-budget---server",
+  "version": "1.0.0",
+  "description": "מערכת ניהול תקציב אישי/משפחתי.",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/g025323030-star/Gutplus-Budget.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/g025323030-star/Gutplus-Budget/issues"
+  },
+  "homepage": "https://github.com/g025323030-star/Gutplus-Budget#readme",
+  "dependencies": {
+    "pg": "^8.20.0",
+    "reflect-metadata": "^0.2.2",
+    "typeorm": "^0.3.28"
+  }
+}
