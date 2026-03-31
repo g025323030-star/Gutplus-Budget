@@ -1,11 +1,21 @@
-# Environment variables — do NOT commit secrets
-.env
+# Dependencies
+node_modules/
+jspm_packages/
 
-# PostgreSQL data volume (if mounted locally)
+# Build output
+dist/
+build/
+
+# Environment variables
+.env
+.env.local
+
+# PostgreSQL data
 pgdata/
 
-# OS & editor
+# OS & Editor
 .DS_Store
 Thumbs.db
 .vscode/
 .idea/
+npm-debug.log*
