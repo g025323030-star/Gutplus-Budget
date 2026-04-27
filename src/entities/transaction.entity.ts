@@ -1,9 +1,12 @@
 import {
   Column,
+  CreateDateColumn,
   Entity,
+  Index,
   JoinColumn,
   ManyToOne,
   PrimaryGeneratedColumn,
+  UpdateDateColumn,
 } from 'typeorm';
 import { Account } from './account.entity';
 import { Category } from './category.entity';
@@ -14,33 +17,51 @@ export class Transaction {
   @PrimaryGeneratedColumn('uuid')
   id!: string;
 
-  @Column({ type: 'decimal', precision: 18, scale: 2 })
+  @Column({
+    name: 'amount',
+    type: 'decimal',
+    precision: 18,
+    scale: 2,
+  })
   amount!: string;
 
-  @Column({ type: 'timestamp' })
+  @Index('IDX_transaction_date')
+  @Column({ name: 'date', type: 'timestamptz' })
   date!: Date;
 
-  @Column({ type: 'text' })
+  @Column({ name: 'description', type: 'text' })
   description!: string;
 
-  @Column({ type: 'boolean', name: 'is_cleared', default: false })
+  @Column({ name: 'is_cleared', type: 'boolean', default: false })
   isCleared!: boolean;
 
+  @Index('IDX_transaction_household')
   @ManyToOne(() => Household, household => household.transactions, {
     onDelete: 'CASCADE',
+    nullable: false,
   })
   @JoinColumn({ name: 'household_id' })
   household!: Household;
 
+  @Index('IDX_transaction_category')
   @ManyToOne(() => Category, {
     onDelete: 'SET NULL',
+    nullable: true,
   })
   @JoinColumn({ name: 'category_id' })
-  category!: Category;
+  category!: Category | null;
 
+  @Index('IDX_transaction_account')
   @ManyToOne(() => Account, account => account.transactions, {
     onDelete: 'SET NULL',
+    nullable: true,
   })
   @JoinColumn({ name: 'account_id' })
-  account!: Account;
+  account!: Account | null;
+
+  @CreateDateColumn({ name: 'created_at', type: 'timestamptz' })
+  createdAt!: Date;
+
+  @UpdateDateColumn({ name: 'updated_at', type: 'timestamptz' })
+  updatedAt!: Date;
 }

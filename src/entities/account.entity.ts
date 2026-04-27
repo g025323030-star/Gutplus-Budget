@@ -1,10 +1,13 @@
 import {
   Column,
+  CreateDateColumn,
   Entity,
+  Index,
   JoinColumn,
   ManyToOne,
   OneToMany,
   PrimaryGeneratedColumn,
+  UpdateDateColumn,
 } from 'typeorm';
 import { Household } from './household.entity';
 import { Transaction } from './transaction.entity';
@@ -22,46 +25,64 @@ export class Account {
   @PrimaryGeneratedColumn('uuid')
   id!: string;
 
-  @Column({ type: 'varchar', length: 255 })
+  @Column({ name: 'name', type: 'varchar', length: 255 })
   name!: string;
 
   @Column({
+    name: 'type',
     type: 'enum',
     enum: AccountType,
+    enumName: 'account_type_enum',
   })
   type!: AccountType;
 
-  @Column({ type: 'decimal', precision: 18, scale: 2, default: 0 })
+  @Column({
+    name: 'balance',
+    type: 'decimal',
+    precision: 18,
+    scale: 2,
+    default: 0,
+  })
   balance!: string;
 
-  @Column({ type: 'varchar', length: 3, default: 'ILS' })
+  @Column({ name: 'currency', type: 'varchar', length: 3, default: 'ILS' })
   currency!: string;
 
   @Column({
+    name: 'monthly_payment',
     type: 'decimal',
     precision: 18,
     scale: 2,
     nullable: true,
   })
-  monthlyPayment!: string;
+  monthlyPayment!: string | null;
 
   @Column({
+    name: 'interest_rate',
     type: 'decimal',
     precision: 5,
     scale: 2,
     nullable: true,
   })
-  interestRate!: string;
+  interestRate!: string | null;
 
-  @Column({ type: 'int', name: 'urgency_level' })
+  @Column({ name: 'urgency_level', type: 'int' })
   urgencyLevel!: number;
 
+  @Index('IDX_account_household')
   @ManyToOne(() => Household, household => household.accounts, {
     onDelete: 'CASCADE',
+    nullable: false,
   })
   @JoinColumn({ name: 'household_id' })
   household!: Household;
 
   @OneToMany(() => Transaction, transaction => transaction.account)
   transactions!: Transaction[];
+
+  @CreateDateColumn({ name: 'created_at', type: 'timestamptz' })
+  createdAt!: Date;
+
+  @UpdateDateColumn({ name: 'updated_at', type: 'timestamptz' })
+  updatedAt!: Date;
 }

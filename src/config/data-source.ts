@@ -1,4 +1,5 @@
 import 'reflect-metadata';
+import * as path from 'path';
 import { DataSource } from 'typeorm';
 import { Account } from '../entities/account.entity';
 import { BudgetPlan } from '../entities/budget-plan.entity';
@@ -6,6 +7,24 @@ import { Category } from '../entities/category.entity';
 import { FamilyMember } from '../entities/family-member.entity';
 import { Household } from '../entities/household.entity';
 import { Transaction } from '../entities/transaction.entity';
+
+const isProduction = process.env.NODE_ENV === 'production';
+
+if (isProduction) {
+  const required = [
+    'POSTGRES_HOST',
+    'POSTGRES_PORT',
+    'POSTGRES_USER',
+    'POSTGRES_PASSWORD',
+    'POSTGRES_DB',
+  ];
+  const missing = required.filter(key => !process.env[key]);
+  if (missing.length > 0) {
+    throw new Error(
+      `Missing required environment variables: ${missing.join(', ')}`,
+    );
+  }
+}
 
 export const AppDataSource = new DataSource({
   type: 'postgres',
@@ -15,7 +34,7 @@ export const AppDataSource = new DataSource({
   password: process.env.POSTGRES_PASSWORD || 'gutplusDP',
   database: process.env.POSTGRES_DB || 'gutplus_budget',
   synchronize: false,
-  logging: true,
+  logging: !isProduction,
   entities: [
     Account,
     BudgetPlan,
@@ -24,6 +43,6 @@ export const AppDataSource = new DataSource({
     Household,
     Transaction,
   ],
-  migrations: ['src/migrations/*.ts'],
+  migrations: [path.join(__dirname, '..', 'migrations', '*.{ts,js}')],
   subscribers: [],
 });
