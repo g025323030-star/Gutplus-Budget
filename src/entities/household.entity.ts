@@ -2,6 +2,8 @@ import {
   Column,
   CreateDateColumn,
   Entity,
+  JoinColumn,
+  ManyToOne,
   OneToMany,
   PrimaryGeneratedColumn,
   UpdateDateColumn,
@@ -11,6 +13,7 @@ import { BudgetPlan } from './budget-plan.entity';
 import { Category } from './category.entity';
 import { FamilyMember } from './family-member.entity';
 import { Transaction } from './transaction.entity';
+import { User } from './user.entity';
 
 @Entity({ name: 'household' })
 export class Household {
@@ -28,6 +31,13 @@ export class Household {
 
   @UpdateDateColumn({ name: 'updated_at', type: 'timestamptz' })
   updatedAt!: Date;
+
+  @ManyToOne(() => User, user => user.households, {
+    onDelete: 'SET NULL',
+    nullable: true,
+  })
+  @JoinColumn({ name: 'user_id' })
+  user!: User | null;
 
   @OneToMany(() => FamilyMember, member => member.household)
   familyMembers!: FamilyMember[];

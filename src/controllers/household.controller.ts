@@ -1,8 +1,9 @@
 import { Request, Response, NextFunction } from 'express';
-import { householdService } from '../services';
+import { householdService, userService } from '../services';
 import { CreateHouseholdDto, UpdateHouseholdDto } from '../dto';
 
 export class HouseholdController {
+
   async create(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
       const createHouseholdDto: CreateHouseholdDto = req.body;

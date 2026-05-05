@@ -3,6 +3,7 @@ import cors from 'cors';
 import helmet from 'helmet';
 import {
   householdRoutes,
+  userRoutes,
   accountRoutes,
   categoryRoutes,
   familyMemberRoutes,
@@ -21,6 +22,7 @@ app.use(express.urlencoded({ extended: true }));
 
 // Routes
 app.use('/api/households', householdRoutes);
+app.use('/api/users', userRoutes);
 app.use('/api/accounts', accountRoutes);
 app.use('/api/categories', categoryRoutes);
 app.use('/api/family-members', familyMemberRoutes);

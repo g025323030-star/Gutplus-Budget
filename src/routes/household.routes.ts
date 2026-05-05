@@ -3,6 +3,8 @@ import { householdController } from '../controllers';
 
 const router = Router();
 
+
+// CRUD operations
 router.post('/', householdController.create.bind(householdController));
 router.get('/', householdController.findAll.bind(householdController));
 router.get('/:id', householdController.findOne.bind(householdController));

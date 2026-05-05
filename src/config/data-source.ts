@@ -7,6 +7,7 @@ import { Category } from '../entities/category.entity';
 import { FamilyMember } from '../entities/family-member.entity';
 import { Household } from '../entities/household.entity';
 import { Transaction } from '../entities/transaction.entity';
+import { User } from '../entities/user.entity';
 
 const isProduction = process.env.NODE_ENV === 'production';
 
@@ -42,6 +43,7 @@ export const AppDataSource = new DataSource({
     FamilyMember,
     Household,
     Transaction,
+    User,
   ],
   migrations: [path.join(__dirname, '..', 'migrations', '*.{ts,js}')],
   subscribers: [],

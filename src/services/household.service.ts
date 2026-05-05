@@ -14,6 +14,7 @@ export class HouseholdService {
     const household = this.householdRepository.create({
       name: createHouseholdDto.name,
       familySize: createHouseholdDto.familySize,
+      user: createHouseholdDto.userId ? ({ id: createHouseholdDto.userId } as any) : null,
     });
     return await this.householdRepository.save(household);
   }
@@ -25,6 +26,8 @@ export class HouseholdService {
   async findOne(id: string): Promise<Household | null> {
     return await this.householdRepository.findOne({ where: { id } });
   }
+
+
 
   async update(id: string, updateHouseholdDto: UpdateHouseholdDto): Promise<Household | null> {
     await this.householdRepository.update(id, updateHouseholdDto);
