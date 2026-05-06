@@ -1,0 +1,82 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* RTL Support */
+html[dir="rtl"] {
+  direction: rtl;
+}
+
+/* Custom animations */
+@keyframes fadeInOut {
+  0%, 100% {
+    opacity: 0;
+  }
+  25%, 75% {
+    opacity: 1;
+  }
+}
+
+/* RTL Slide animations */
+@keyframes slideInFromRight {
+  from {
+    opacity: 0;
+    transform: translateX(50px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@keyframes slideOutToRight {
+  from {
+    opacity: 1;
+    transform: translateX(0);
+  }
+  to {
+    opacity: 0;
+    transform: translateX(50px);
+  }
+}
+
+@layer utilities {
+  .animate-fade-in-out {
+    animation: fadeInOut 6s ease-in-out infinite;
+  }
+
+  .animate-slide-in-rtl {
+    animation: slideInFromRight 0.3s ease-out;
+  }
+
+  .animate-slide-out-rtl {
+    animation: slideOutToRight 0.3s ease-in;
+  }
+}
+
+/* Typography utilities */
+@layer components {
+  .heading-1 {
+    @apply text-4xl font-bold text-primary;
+  }
+
+  .heading-2 {
+    @apply text-3xl font-bold text-primary;
+  }
+
+  .heading-3 {
+    @apply text-2xl font-bold text-primary;
+  }
+
+  .body-text {
+    @apply text-base text-slate-600;
+  }
+
+  .body-text-sm {
+    @apply text-sm text-slate-600;
+  }
+
+  .label-text {
+    @apply text-sm font-medium text-slate-700;
+  }
+}

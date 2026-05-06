@@ -1,6 +1,29 @@
-# React + TypeScript + Vite
+# GutPlus Budget - Client
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+A React + TypeScript + Vite application for family budget management.
+
+## Features
+
+### Login Page
+- **Multi-step authentication form** (Step 1: Email, Step 2: Password/Registration)
+- **Split layout design** (50/50 on desktop, responsive on mobile)
+- **Visual panel** with rotating financial quotes and minimalist icons
+- **Smooth animations** using Framer Motion
+- **Color-coded UI** with professional financial design
+
+### Tech Stack
+- **React 19.2.5** - UI framework
+- **TypeScript** - Type safety
+- **Tailwind CSS v3** - Styling
+- **Framer Motion** - Animations
+- **Lucide React** - Icons
+- **Vite** - Build tool
+
+### Color Palette
+- **Primary**: #163351 (Navy) - Headings
+- **Accent**: #358383 (Teal) - Buttons & CTAs
+- **Background**: #F1F5F9 (Soft Blue-Grey)
+- **Surface**: #FFFFFF (White)
 
 Currently, two official plugins are available:
 
