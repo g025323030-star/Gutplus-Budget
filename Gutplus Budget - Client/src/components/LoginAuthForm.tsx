@@ -5,6 +5,7 @@ interface LoginAuthFormProps {
   email: string;
   isNewUser: boolean;
   onBack: () => void;
+  onForgotPassword?: () => void;
   showPassword: boolean;
   setShowPassword: (show: boolean) => void;
 }
@@ -18,6 +19,7 @@ export default function LoginAuthForm({
   email,
   isNewUser,
   onBack,
+  onForgotPassword,
   showPassword,
   setShowPassword,
 }: LoginAuthFormProps) {
@@ -117,12 +119,13 @@ export default function LoginAuthForm({
             animate={{ opacity: 1 }}
             transition={{ delay: 0.1 }}
           >
-            <a
-              href="#forgot-password"
-              className="text-sm font-medium text-primary hover:underline"
+            <button
+              type="button"
+              onClick={onForgotPassword}
+              className="text-accent font-medium hover:underline transition-colors"
             >
-              שכחת סיסמה?
-            </a>
+              שכחת סיסמא?
+            </button>
           </motion.div>
         )}
 
@@ -132,7 +135,7 @@ export default function LoginAuthForm({
           className="w-full bg-accent hover:bg-accent/90 text-white font-medium py-2.5 rounded-xl flex items-center justify-center gap-2 transition-all duration-300 mt-6"
         >
           {isNewUser ? 'צור חשבון' : 'התחבר'}
-          <ArrowRight size={18} strokeWidth={1.5} />
+          <ArrowLeft size={18} strokeWidth={1.5} />
         </button>
       </form>
 
@@ -144,25 +147,17 @@ export default function LoginAuthForm({
         whileHover={{ scale: 1.02 }}
         whileTap={{ scale: 0.98 }}
       >
-        <ArrowLeft size={18} strokeWidth={1.5} />
+        <ArrowRight size={18} strokeWidth={1.5} />
         <span className="text-sm font-medium">חזרה</span>
       </motion.button>
 
-      {/* Footer Text */}
       <motion.div
         className="text-center text-xs text-slate-600"
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
         transition={{ delay: 0.2 }}
       >
-        {isNewUser ? (
-          <p>
-            כבר יש לך חשבון?{' '}
-            <a href="#" className="text-accent font-medium hover:underline">
-              כנס כאן
-            </a>
-          </p>
-        ) : (
+        {isNewUser && (
           <p>
             עדיין אין לך חשבון?{' '}
             <a href="#" className="text-accent font-medium hover:underline">
