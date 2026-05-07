@@ -69,7 +69,7 @@ export default function LoginPage() {
 
 
     const handleBackToEmail = () => {
-        setStep('email');
+        setStep(undefined);
         // Keep email preserved, only clear error and reset state
         setEmailError(null);
         setIsNewUser(false);
@@ -80,7 +80,7 @@ export default function LoginPage() {
     };
 
     const handleBackFromReset = () => {
-        setStep('email');
+        setStep(undefined);
         setEmailError(null);
     };
 
@@ -116,7 +116,7 @@ export default function LoginPage() {
             <motion.div className="w-full lg:w-1/2 bg-surface flex items-center justify-center p-6 lg:p-0">
                 <div className="w-full max-w-md">
                     <AnimatePresence mode="wait">
-                        {!step || step === 'reset-password' ? (
+                        {!step ? (
                             <motion.div
                                 key="email-step"
                                 variants={emailStepVariants}
