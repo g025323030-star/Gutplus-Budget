@@ -24,13 +24,18 @@ async checkEmailExists(
     req: Request,
     res: Response,
     next: NextFunction,
-  ): Promise<void> {
+  ): Promise<any> {
     try {
         const { email } = req.query as { email: string };
+        console.log("Received email for check:", email);
+        if (!email) {
+            return res.status(400).json({ message: "Email is required" });
+    }
         const user = await userService.findByEmail(email);
+        console.log("User found:", user);
         //בדיקה ראשונה-האם המשתמש מורשה במערכת
 if(!user){
-        res.status(404).json({
+        res.status(403).json({
           success: false,
           message: 'unauthorized user.',
         });
@@ -58,7 +63,7 @@ if(!user){
         });
         return;
       }else{
-            res.status(400).json({
+            res.status(200).json({
           message: 'Account is not active. Please sign up',
         });
         return;
