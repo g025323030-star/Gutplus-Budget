@@ -52,7 +52,7 @@ export default function LoginVisualSide() {
     visible: {
       opacity: 1,
       y: 0,
-      transition: { duration: 0.6, ease: 'easeOut' },
+      transition: { duration: 0.6 },
     },
   };
 
@@ -85,7 +85,6 @@ export default function LoginVisualSide() {
               }}
               transition={{
                 duration: 0.8,
-                ease: 'easeInOut',
               }}
             >
               <div className="flex justify-center">
@@ -93,7 +92,6 @@ export default function LoginVisualSide() {
                   animate={{ scale: [1, 1.1, 1] }}
                   transition={{
                     duration: 2,
-                    ease: 'easeInOut',
                     repeat: Infinity,
                   }}
                 >

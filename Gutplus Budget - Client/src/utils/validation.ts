@@ -18,3 +18,19 @@ export const getEmailErrorMessage = (email: string): string | null => {
   }
   return null;
 };
+
+/**
+ * Compare two passwords and return error message if they don't match
+ */
+export const validatePasswordMatch = (password: string, confirmPassword: string): string | null => {
+  if (!password) {
+    return 'אנא הזן סיסמה';
+  }
+  if (!confirmPassword) {
+    return 'אנא אשר את הסיסמה';
+  }
+  if (password !== confirmPassword) {
+    return 'הסיסמאות אינן תואמות';
+  }
+  return null;
+};

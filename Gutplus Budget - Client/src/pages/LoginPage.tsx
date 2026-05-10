@@ -21,6 +21,7 @@ export default function LoginPage() {
     const [emailError, setEmailError] = useState<string | null>(null);
     const [isNewUser, setIsNewUser] = useState(false);
     const [showPassword, setShowPassword] = useState(false);
+    const [showConfirmPassword, setShowConfirmPassword] = useState(false);
 
     const handleEmailChange = (value: string) => {
         setEmail(value);
@@ -36,15 +37,15 @@ export default function LoginPage() {
             const resEmailChk = await checkEmail(email);
             console.log('Email check response:', resEmailChk);
             if (resEmailChk.message == 'unauthorized user.') {
-                setEmailError('משתמש לא מזוהה במערכת, אנא פנה למשרדי גוטפלוס');
+                setEmailError('משתמש לא מזוהה במערכת, אנא פנה למשרדי גוטפלוס להרשמה');
             } 
-            if (resEmailChk.message == 'Account expired. Please contact support.') {
+            else if (resEmailChk.message == 'Account expired. Please contact support.') {
                 setEmailError(' חשבון פג תוקף. אנא פנה למשרדי גוטפלוס');
             } 
             else if (resEmailChk.message == 'Welcome back! User found.') {
                 console.log('Email check response:', resEmailChk);
-                setStep('email');
-
+                setStep('auth');
+                setIsNewUser(false);
             }
             else {
                 setStep('auth');
@@ -144,10 +145,11 @@ export default function LoginPage() {
                                                     placeholder="you@example.com"
                                                     value={email}
                                                     onChange={(e) => handleEmailChange(e.target.value)}
-                                                    className={`w-full pl-10 pr-4 py-2 border rounded-xl focus:outline-none focus:ring-2 transition-all ${emailError
+                                                    className={`w-full pl-10 pr-4 py-2 border rounded-xl focus:outline-none focus:ring-2 transition-all ${
+                                                        emailError
                                                             ? 'border-red-400 focus:ring-red-400'
                                                             : 'border-slate-200 focus:ring-accent'
-                                                        }`}
+                                                    }`}
                                                     required
                                                 />
                                             </div>
@@ -191,9 +193,11 @@ export default function LoginPage() {
                                     onForgotPassword={handleForgotPassword}
                                     showPassword={showPassword}
                                     setShowPassword={setShowPassword}
+                                    showConfirmPassword={showConfirmPassword}
+                                    setShowConfirmPassword={setShowConfirmPassword}
                                 />
                             </motion.div>
-                        ) : step === 'reset-password' ? (
+                        ) : step === 'reset-password' && (
                             <motion.div
                                 key="reset-step"
                                 variants={authStepVariants}
@@ -207,7 +211,7 @@ export default function LoginPage() {
                                     onBack={handleBackFromReset}
                                 />
                             </motion.div>
-                        ) : null
+                        )}
                     </AnimatePresence>
                 </div>
             </motion.div>

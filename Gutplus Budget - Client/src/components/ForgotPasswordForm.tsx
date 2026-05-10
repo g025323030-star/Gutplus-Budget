@@ -65,7 +65,7 @@ export default function ForgotPasswordForm({
           className="w-full bg-accent hover:bg-accent/90 text-white font-medium py-2.5 rounded-xl flex items-center justify-center gap-2 transition-all duration-300 mt-6"
         >
           שלח מייל לאיפוס סיסמה
-          <ArrowRight size={18} strokeWidth={1.5} />
+          <ArrowLeft size={18} strokeWidth={1.5} />
         </button>
       </form>
 
@@ -77,7 +77,7 @@ export default function ForgotPasswordForm({
         whileHover={{ scale: 1.02 }}
         whileTap={{ scale: 0.98 }}
       >
-        <ArrowLeft size={18} strokeWidth={1.5} />
+        <ArrowRight size={18} strokeWidth={1.5} />
         <span className="text-sm font-medium">חזרה</span>
       </motion.button>
     </motion.div>
