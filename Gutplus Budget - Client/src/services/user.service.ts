@@ -18,7 +18,6 @@ export const checkEmail = async (email: string): Promise<EmailCheckResponse> => 
     return resEmailChk.data;
   } catch (error) {
     if (axios.isAxiosError(error)) {
-      console.log(error.response);
       if (error.response?.status === 403) {
         if (
           error.response?.data?.message ===
@@ -30,6 +29,21 @@ export const checkEmail = async (email: string): Promise<EmailCheckResponse> => 
       }
     }
     console.error("Error checking email:", error);
+    throw error;
+  }
+};
+
+export const signUp = async (email: string, password: string): Promise<string> => {
+  try {
+    await axios.post(import.meta.env.VITE_SERVER_URL + "users/sign-up", {
+      email,
+      password,
+    });
+   
+    return 'success';
+    
+  } catch (error) {
+    console.error("Error during sign-up:", error);
     throw error;
   }
 };

@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { motion } from 'framer-motion';
 import { Lock, ArrowLeft, Eye, EyeOff, ArrowRight, AlertCircle } from 'lucide-react';
 import { validatePasswordMatch } from '../utils/validation';
+import { signUp } from '../services/user.service';
 
 interface LoginAuthFormProps {
   email: string;
@@ -52,7 +53,7 @@ export default function LoginAuthForm({
     }
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async(e: React.FormEvent) => {
     e.preventDefault();
     
     // Validate passwords for new users
@@ -64,7 +65,15 @@ export default function LoginAuthForm({
       }
     }
 
-    // TODO: Implement actual login/registration logic
+    await signUp(email, password).then((res:string) => {
+      
+      if(res==='success'){
+        console.log('User signed up successfully');
+      }
+    }).catch((error) => {
+      console.error('Error signing up:', error);
+    });
+
     console.log('Form submitted');
   };
 
