@@ -11,16 +11,22 @@ import {
   transactionRoutes,
 } from './routes';
 import { errorHandler } from './middlewares';
+import { rollingTokenMiddleware } from './middlewares/referenceToken';
+import dotenv from 'dotenv';
+dotenv.config();
 
 const app = express();
 
 // Middleware
-app.use(cors());
-// app.use(cors({
-//     origin: 'http://localhost:5173', // הפורט שבו רץ ה-Vite שלך
-//     methods: ['GET', 'POST', 'PUT', 'DELETE'],
-//     credentials: true
-// }));
+app.use(cors({
+  origin: 'http://localhost:5173', 
+  credentials: true,  
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization']
+}));
+
+app.use(rollingTokenMiddleware); // הוספת המידלוור לטיפול בטוקן מתגלגל לפני כל שאר המידלוורים
+
 app.use(helmet());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));

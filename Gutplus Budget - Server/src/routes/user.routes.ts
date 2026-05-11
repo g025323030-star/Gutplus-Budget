@@ -9,6 +9,8 @@ router.get(
   userController.checkEmailExists.bind(userController),
 );
 
+router.post('/sign-up', userController.signUp.bind(userController));
+
 // router.post('/', userController.create.bind(userController));
 // router.get('/', userController.findAll.bind(userController));
 // router.get('/:id', userController.findOne.bind(userController));

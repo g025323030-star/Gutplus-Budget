@@ -1,25 +1,22 @@
 import { Request, Response, NextFunction } from 'express';
 import { userService } from '../services';
 import { CreateUserDto, UpdateUserDto } from '../dto/user.dto';
+import { generateSignInToken } from '../utils/jwt.utils';
+
+
+  interface User{
+    id: string;
+    email: string;
+    password?: string | null;
+  }
 
 export class UserController {
-
-    /**
+ /**
        * 1. האם המיייל קיים בדאטאבייס=משתמש מורשה
        * 2. האם החשבון בתוקף
        * 3. האם קיימת סיסמא- אם כן, חשבון קיים וניתן להתחבר
        * 4. אם לא קיימת סיסמא- חשבון לא פעיל, יש להירשם
        */
-      
-    
-      /**
-       * יצור טוקן בסיסי להתחברות
-       * בעתיד: זה יכול להיות JWT או כל טוקן אחר
-       */
-      private generateSignInToken(householdId: string): string {
-        return Buffer.from(householdId).toString('base64');
-      }
-
 async checkEmailExists(
     req: Request,
     res: Response,
@@ -51,15 +48,10 @@ if(!user){
       }
       //בדיקה שלישית-האם קיימת סיסמא- אם כן, חשבון קיים וניתן להתחבר
       if (user.password) {
-        const token = this.generateSignInToken(user.id);
         res.status(200).json({
           success: true,
           message: 'Welcome back! User found.',
-          action: 'signin',
-          data: {
-            userId: user.id,
-            token,
-          }
+          action: 'signin'
         });
         return;
       }else{
@@ -72,6 +64,36 @@ if(!user){
       next(error);
     }
   }
+
+  /**
+   * פונקציה ליצירת הסיסמה במשתמש מאושר וחדש
+   */
+  async signUp(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const { email, password } = req.body;
+      let user: User | null= await userService.findByEmail(email);
+      if (!user) {
+        res.status(404).json({
+          success: false,
+          message: 'User not found',
+        });
+        return;
+      }
+      user.password = password;
+      await userService.update(user.id, { password });
+      const cookieData = generateSignInToken(user.id);
+      
+      res.cookie(cookieData.name, cookieData.value, cookieData.options);
+
+  res.status(200).send({ message: "Logged in successfully" });
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /**
+   * פונקציית התחברות
+   */
 
   async create(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {

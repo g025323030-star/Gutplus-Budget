@@ -6,7 +6,7 @@ export const errorHandler = (
   res: Response,
   next: NextFunction,
 ): void => {
-  console.error("*************" +error);
+  console.error("Middlewhere error " +error);
 
   res.status(500).json({
     success: false,
