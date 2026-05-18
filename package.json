@@ -1,0 +1,19 @@
+{
+  "name": "gutplus-budget",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Gutplus Budget monorepo - client, server, and shared contracts",
+  "workspaces": [
+    "shared",
+    "client",
+    "server"
+  ],
+  "scripts": {
+    "dev:client": "npm run dev --workspace=gutplus-budget-client",
+    "dev:server": "npm run dev --workspace=gutplus-budget-server",
+    "build:shared": "npm run build --workspace=@gutplus/shared",
+    "build:client": "npm run build --workspace=gutplus-budget-client",
+    "build:server": "npm run build --workspace=gutplus-budget-server",
+    "build": "npm run build:shared && npm run build:client && npm run build:server"
+  }
+}
