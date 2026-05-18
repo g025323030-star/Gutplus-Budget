@@ -7,7 +7,7 @@ export const errorHandler = (
   next: NextFunction,
 ): void => {
   console.error("Middlewhere error " +error);
-
+console.error("Stack:", error.stack);
   res.status(500).json({
     success: false,
     message: 'Internal server error',

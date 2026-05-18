@@ -1,15 +1,15 @@
 import { Router } from 'express';
 import { userController } from '../controllers';
+import { authGuard } from '../middlewares/authGuard';
 
 const router = Router();
 
-
-router.get(
-  '/check-email',
-  userController.checkEmailExists.bind(userController),
-);
-
+router.get('/check-email', userController.checkEmailExists.bind(userController));
 router.post('/sign-up', userController.signUp.bind(userController));
+router.post('/login', userController.login.bind(userController));
+router.post('/forgot-password', userController.forgotPassword.bind(userController));
+router.get('/me', authGuard, userController.me.bind(userController));
+router.post('/logout', authGuard, userController.logout.bind(userController));
 
 // router.post('/', userController.create.bind(userController));
 // router.get('/', userController.findAll.bind(userController));

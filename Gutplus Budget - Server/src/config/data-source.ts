@@ -6,6 +6,7 @@ import { BudgetPlan } from '../entities/budget-plan.entity';
 import { Category } from '../entities/category.entity';
 import { FamilyMember } from '../entities/family-member.entity';
 import { Household } from '../entities/household.entity';
+import { PasswordResetToken } from '../entities/token.entity';
 import { Transaction } from '../entities/transaction.entity';
 import { User } from '../entities/user.entity';
 
@@ -42,6 +43,7 @@ export const AppDataSource = new DataSource({
     Category,
     FamilyMember,
     Household,
+    PasswordResetToken,
     Transaction,
     User,
   ],

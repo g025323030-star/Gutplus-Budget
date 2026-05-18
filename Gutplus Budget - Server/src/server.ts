@@ -1,4 +1,5 @@
 import 'reflect-metadata';
+import 'dotenv/config';
 import { AppDataSource } from './config/data-source';
 import app from './app';
 

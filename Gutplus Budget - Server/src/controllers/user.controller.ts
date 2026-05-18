@@ -1,8 +1,15 @@
 import { Request, Response, NextFunction } from 'express';
 import { userService } from '../services';
 import { CreateUserDto, UpdateUserDto } from '../dto/user.dto';
-import { generateSignInToken } from '../utils/jwt.utils';
+import { generateSignInToken, cookieOptions } from '../utils/jwt.utils';
+import { sendEmail } from '../utils/sendEmail';
+import { hashPassword, comparePassword } from '../utils/password.utils';
+import { resetPasswordEmailTemplate, formatResetPasswordEmailTemplate } from '../templates/emailTemp';
+import { tokenController } from './token.controller';
 
+interface EmailCheckResponse {
+  message: string;
+}
 
   interface User{
     id: string;
@@ -79,21 +86,75 @@ if(!user){
         });
         return;
       }
-      user.password = password;
-      await userService.update(user.id, { password });
-      const cookieData = generateSignInToken(user.id);
-      
-      res.cookie(cookieData.name, cookieData.value, cookieData.options);
-
-  res.status(200).send({ message: "Logged in successfully" });
+      const hashedPassword = await hashPassword(password);
+      await userService.update(user.id, { password: hashedPassword });
+      const token = generateSignInToken(user.id);
+      res.cookie(cookieOptions.name, token, cookieOptions.options);
+      res.status(200).send({ message: "Logged in successfully" });
     } catch (error) {
       next(error);
     }
   }
 
+  async login(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const { email, password } = req.body;
+      const user = await userService.findByEmail(email);
+      if (!user || !user.password) {
+        res.status(401).json({ success: false, message: 'Invalid credentials' });
+        return;
+      }
+      const isMatch = await comparePassword(password, user.password);
+      if (!isMatch) {
+        res.status(401).json({ success: false, message: 'Invalid credentials' });
+        return;
+      }
+      const token = generateSignInToken(user.id);
+      res.cookie(cookieOptions.name, token, cookieOptions.options);
+      res.status(200).json({ message: 'Logged in successfully' });
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  async me(req: Request, res: Response): Promise<void> {
+    res.status(200).json({ id: (req as any).user.id });
+  }
+
+  async logout(_req: Request, res: Response): Promise<void> {
+    res.clearCookie(cookieOptions.name);
+    res.status(200).json({ message: 'Logged out successfully' });
+  }
+
   /**
-   * פונקציית התחברות
+   * פונקציה לשליחת מייל עבור איפוס סיסמא
    */
+
+  async forgotPassword(req: Request, res: Response) {
+    try {
+      const { email } = req.body;
+      const user = await userService.findByEmail(email);
+      console.log('User found for forgot password:', user);
+      if (!user) {
+        return res.status(404).json({ message: 'User not found' });
+      }
+
+      const token = await tokenController.createResetToken(user.id);
+      const resetLink = `${process.env.FRONTEND_URL || 'http://localhost:5174'}/reset-password?token=${encodeURIComponent(token)}&email=${encodeURIComponent(email)}`;
+      const html = formatResetPasswordEmailTemplate(resetLink);
+
+      await sendEmail({
+        to: email,
+        subject: 'איפוס סיסמה',
+        html,
+      });
+
+      res.status(200).json({ message: 'Password reset email sent' });
+    } catch (error) {
+      console.error('Forgot password error:', error);
+      res.status(500).json({ error: 'Internal server error' });
+    }
+  }
 
   async create(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {

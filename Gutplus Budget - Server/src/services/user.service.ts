@@ -2,6 +2,7 @@ import { Repository } from 'typeorm';
 import { AppDataSource } from '../config/data-source';
 import { User } from '../entities/user.entity';
 import { CreateUserDto, UpdateUserDto } from '../dto/user.dto';
+import { hashPassword } from '../utils/password.utils';
 
 export class UserService {
   private userRepository: Repository<User>;
@@ -11,13 +12,16 @@ export class UserService {
   }
 
   async create(createUserDto: CreateUserDto): Promise<User> {
+    // Hash password if provided
+    let hashedPassword = createUserDto.password ? await hashPassword(createUserDto.password) : null;
+    
     const user = this.userRepository.create({
       lastName: createUserDto.lastName,
       cycle: createUserDto.cycle || null,
       expirationDate: createUserDto.expirationDate || null,
       subscriptionType: createUserDto.subscriptionType || null,
       email: createUserDto.email,
-      password: createUserDto.password || null,
+      password: hashedPassword,
     });
     return await this.userRepository.save(user);
   }
@@ -45,7 +49,13 @@ export class UserService {
   }
 
   async update(id: string, updateUserDto: UpdateUserDto): Promise<User | null> {
-    await this.userRepository.update(id, updateUserDto);
+    // Hash password if being updated
+    let updateData = { ...updateUserDto };
+    if (updateData.password) {
+      updateData.password = await hashPassword(updateData.password);
+    }
+    
+    await this.userRepository.update(id, updateData);
     return await this.findOne(id);
   }
 

@@ -1,9 +1,11 @@
+import 'dotenv/config';
 import express from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
 import {
   householdRoutes,
   userRoutes,
+  tokenRoutes,
   accountRoutes,
   categoryRoutes,
   familyMemberRoutes,
@@ -12,8 +14,7 @@ import {
 } from './routes';
 import { errorHandler } from './middlewares';
 import { rollingTokenMiddleware } from './middlewares/referenceToken';
-import dotenv from 'dotenv';
-dotenv.config();
+import { authGuard } from './middlewares/authGuard';
 
 const app = express();
 
@@ -32,13 +33,14 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
 // Routes
-app.use('/api/households', householdRoutes);
 app.use('/api/users', userRoutes);
-app.use('/api/accounts', accountRoutes);
-app.use('/api/categories', categoryRoutes);
-app.use('/api/family-members', familyMemberRoutes);
-app.use('/api/budget-plans', budgetPlanRoutes);
-app.use('/api/transactions', transactionRoutes);
+app.use('/api/tokens', tokenRoutes);
+app.use('/api/households', authGuard, householdRoutes);
+app.use('/api/accounts', authGuard, accountRoutes);
+app.use('/api/categories', authGuard, categoryRoutes);
+app.use('/api/family-members', authGuard, familyMemberRoutes);
+app.use('/api/budget-plans', authGuard, budgetPlanRoutes);
+app.use('/api/transactions', authGuard, transactionRoutes);
 
 // Health check
 app.get('/health', (req, res) => {

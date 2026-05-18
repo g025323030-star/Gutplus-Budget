@@ -7,6 +7,7 @@ import {
   UpdateDateColumn,
 } from 'typeorm';
 import { Household } from './household.entity';
+import { PasswordResetToken } from './token.entity';
 
 @Entity({ name: 'user' })
 export class User {
@@ -33,6 +34,9 @@ export class User {
 
   @OneToMany(() => Household, household => household.user)
   households!: Household[];
+
+  @OneToMany(() => PasswordResetToken, token => token.user)
+  resetTokens!: PasswordResetToken[];
 
   @CreateDateColumn({ name: 'created_at', type: 'timestamptz' })
   createdAt!: Date;
