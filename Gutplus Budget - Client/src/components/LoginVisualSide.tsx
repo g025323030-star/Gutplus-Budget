@@ -1,171 +1,167 @@
-import { motion } from 'framer-motion';
+import { useState, useEffect } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
 import {
   TrendingUp,
   PieChart,
-  Target,
   Wallet,
   DollarSign,
-  PiggyBank,
 } from 'lucide-react';
 
-/**
- * LoginVisualSide Component
- * Displays rotating financial quotes with minimalist icons
- */
+const quotes = [
+  {
+    title: "סדר בראש, סדר במקלדת",
+    text: "ניהול תקציב חכם שמארגן לכם את ההכנסות, מסכם את ההוצאות בממשק נוח וזמין.",
+    icon: Wallet,
+  },
+  {
+    title: "ארבעת הצעדים לשלווה כלכלית",
+    text: "לדעת, לפעול, לתכנן, להרוויח! המודל של גוטפלוס שהביא אלפי משפחות לשלווה אמיתית.",
+    icon: DollarSign,
+  },
+  {
+    title: "להפוך תקציב מאויב לאוהב",
+    text: "אנו מאמינים שחיים עם תקציב הם מסודרים ושלווים יותר. מוזמנים לאהוב את המסגרת!",
+    icon: PieChart,
+  },
+  {
+    title: "הפלא השמיני בתבל: ריבית דריבית",
+    text: "לבחור מסלול השקעות חכם ולתכנן היום את התשואה של מחר.",
+    icon: TrendingUp
+  },
+];
+
 export default function LoginVisualSide() {
-  const quotes = [
-    {
-      text: "תקציב הוא הנחיית כספך לאן שהוא צריך ללכת, במקום להתהפך איפה הוא הלך.",
-      icon: Wallet,
-    },
-    {
-      text: "ההשקעה הטובה ביותר היא בעצמך ובביטחון הכספי של משפחתך.",
-      icon: PiggyBank,
-    },
-    {
-      text: "שלום כספי מושג כאשר יש לך תוכנית מוצקה.",
-      icon: Target,
-    },
-    {
-      text: "כל דולר שחוסכים היום הוא דולר שמרוויח לעתידך.",
-      icon: DollarSign,
-    },
-    {
-      text: "תקציב חכם הופך חלומות למטרות השגות.",
-      icon: TrendingUp,
-    },
-  ];
+  const [index, setIndex] = useState(0);
 
-  const containerVariants = {
-    hidden: { opacity: 0 },
-    visible: {
-      opacity: 1,
-      transition: {
-        staggerChildren: 0.3,
-        delayChildren: 0.2,
-      },
-    },
-  };
+  // החלפת משפטים אוטומטית בכל 5 שניות
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setIndex((prev) => (prev + 1) % quotes.length);
+    }, 5000);
+    return () => clearInterval(timer);
+  }, []);
 
-  const itemVariants = {
-    hidden: { opacity: 0, y: 20 },
-    visible: {
-      opacity: 1,
-      y: 0,
-      transition: { duration: 0.6 },
-    },
-  };
+  const Icon = quotes[index].icon;
 
   return (
-    <motion.div
-      className="w-full h-full flex flex-col items-center justify-center p-12 bg-background"
-      variants={containerVariants}
-      initial="hidden"
-      animate="visible"
-    >
-      {/* Header */}
-      <motion.div className="text-center mb-16 space-y-4" variants={itemVariants}>
-        <h2 className="heading-1 text-primary">GutPlus Budget</h2>
-        <p className="body-text max-w-md">
-          השתלוט על כספי המשפחה שלך עם תקציב חכם
-        </p>
-      </motion.div>
+    <div className="relative w-full h-full flex flex-col items-center justify-center overflow-hidden bg-[#163351]">
+      
+      {/* אלמנטים גרפיים נעים ברקע (צבע הטורקיז) */}
+      <motion.div 
+        animate={{ 
+          scale: [1, 1.2, 1],
+          rotate: [0, 90, 0],
+          opacity: [0.1, 0.2, 0.1] 
+        }}
+        transition={{ duration: 20, repeat: Infinity, ease: "linear" }}
+        className="absolute -top-20 -right-20 w-96 h-96 rounded-full bg-[#358383] blur-3xl"
+      />
+      <motion.div 
+        animate={{ 
+          x: [-20, 20, -20],
+          y: [0, 50, 0],
+          opacity: [0.05, 0.15, 0.05]
+        }}
+        transition={{ duration: 15, repeat: Infinity, ease: "easeInOut" }}
+        className="absolute -bottom-10 -left-10 w-[500px] h-[500px] rounded-full bg-[#358383] blur-[100px]"
+      />
 
-      {/* Rotating Quotes Section */}
-      <motion.div className="relative w-full h-64 flex items-center justify-center">
-        {quotes.map((quote, index) => {
-          const Icon = quote.icon;
-          return (
+      {/* שכבת תוכן מרכזית */}
+      <div className="relative z-10 w-full max-w-lg px-12 text-center text-white">
+        
+        {/* לוגו או כותרת עליונה */}
+        <motion.div 
+          initial={{ opacity: 0, y: -20 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="mb-16"
+        >
+          <h2 className="text-4xl font-black tracking-tight mb-2">גוטפלוס <span className="text-[#358383]">פיננסנט</span></h2>
+          <div className="h-1 w-20 bg-[#358383] mx-auto rounded-full" />
+        </motion.div>
+
+        {/* משפטים מתחלפים עם AnimatePresence */}
+        <div className="relative h-64">
+          <AnimatePresence mode="wait">
             <motion.div
               key={index}
-              className="absolute w-full flex flex-col items-center justify-center space-y-6 px-8"
-              initial={{ opacity: 0 }}
-              animate={{
-                opacity: index === 0 ? 1 : 0,
-              }}
-              transition={{
-                duration: 0.8,
-              }}
+              initial={{ opacity: 0, x: 50 }}
+              animate={{ opacity: 1, x: 0 }}
+              exit={{ opacity: 0, x: -50 }}
+              transition={{ duration: 0.6, ease: "easeOut" }}
+              className="absolute inset-0 flex flex-col items-center"
             >
-              <div className="flex justify-center">
-                <motion.div
-                  animate={{ scale: [1, 1.1, 1] }}
-                  transition={{
-                    duration: 2,
-                    repeat: Infinity,
-                  }}
-                >
-                  <Icon
-                    size={48}
-                    className="text-accent stroke-[1.5]"
-                    strokeWidth={1.5}
-                  />
-                </motion.div>
+              <div className="mb-6 p-4 bg-white/5 rounded-2xl backdrop-blur-sm border border-white/10 shadow-2xl">
+                <Icon size={48} className="text-[#358383]" strokeWidth={1.5} />
               </div>
-              <p className="text-center text-primary font-medium text-lg leading-relaxed">
-                "{quote.text}"
+              
+              <h3 className="text-2xl font-bold mb-4 leading-tight">
+                {quotes[index].title}
+              </h3>
+              
+              <p className="text-lg text-slate-300 leading-relaxed max-w-sm">
+                {quotes[index].text}
               </p>
             </motion.div>
-          );
-        })}
-      </motion.div>
+          </AnimatePresence>
+        </div>
 
-      {/* Quote Indicators */}
-      <motion.div
-        className="mt-12 flex gap-2 justify-center"
-        variants={itemVariants}
-      >
-        {quotes.map((_, index) => (
-          <motion.div
-            key={index}
-            className="h-2 bg-slate-300 rounded-full cursor-pointer transition-all"
-            animate={{
-              width: index === 0 ? 32 : 8,
-              backgroundColor: index === 0 ? '#358383' : '#cbd5e1',
-            }}
-            transition={{ duration: 0.3 }}
-          />
-        ))}
-      </motion.div>
+        {/* אינדיקטורים בתחתית */}
+        <div className="mt-12 flex gap-3 justify-center">
+          {quotes.map((_, i) => (
+            <button
+              key={i}
+              onClick={() => setIndex(i)}
+              className="relative h-1 rounded-full overflow-hidden transition-all duration-300"
+              style={{ width: i === index ? '40px' : '12px' }}
+            >
+              <div className={`absolute inset-0 ${i === index ? 'bg-[#358383]' : 'bg-white/20'}`} />
+              {i === index && (
+                <motion.div 
+                  initial={{ x: "-100%" }}
+                  animate={{ x: "0%" }}
+                  transition={{ duration: 5, ease: "linear" }}
+                  className="absolute inset-0 bg-white/40"
+                />
+              )}
+            </button>
+          ))}
+        </div>
+      </div>
 
-      {/* Financial Icons Grid */}
-      <motion.div
-        className="mt-16 grid grid-cols-3 gap-6"
-        variants={itemVariants}
-      >
+      {/* אלמנטים צפים קטנים (אייקונים דהויים ברקע) */}
+      <FloatingIcons />
+    </div>
+  );
+}
+
+function FloatingIcons() {
+  return (
+    <div className="absolute inset-0 pointer-events-none opacity-20">
+      {[...Array(6)].map((_, i) => (
         <motion.div
-          className="flex flex-col items-center gap-3"
-          whileHover={{ scale: 1.05 }}
-          transition={{ type: 'spring', stiffness: 400 }}
+          key={i}
+          className="absolute text-white"
+          initial={{ 
+            x: Math.random() * 800, 
+            y: Math.random() * 800 
+          }}
+          animate={{ 
+            y: [0, -30, 0],
+            opacity: [0.2, 0.5, 0.2]
+          }}
+          transition={{ 
+            duration: 5 + i, 
+            repeat: Infinity, 
+            ease: "easeInOut" 
+          }}
+          style={{ 
+            left: `${Math.random() * 100}%`, 
+            top: `${Math.random() * 100}%` 
+          }}
         >
-          <div className="w-12 h-12 rounded-full bg-accent/10 flex items-center justify-center">
-            <Wallet className="text-accent" strokeWidth={1.5} size={24} />
-          </div>
-          <span className="text-xs text-slate-600">ניטור</span>
+          <DollarSign size={20 + i * 5} />
         </motion.div>
-
-        <motion.div
-          className="flex flex-col items-center gap-3"
-          whileHover={{ scale: 1.05 }}
-          transition={{ type: 'spring', stiffness: 400 }}
-        >
-          <div className="w-12 h-12 rounded-full bg-accent/10 flex items-center justify-center">
-            <PieChart className="text-accent" strokeWidth={1.5} size={24} />
-          </div>
-          <span className="text-xs text-slate-600">ניתוח</span>
-        </motion.div>
-
-        <motion.div
-          className="flex flex-col items-center gap-3"
-          whileHover={{ scale: 1.05 }}
-          transition={{ type: 'spring', stiffness: 400 }}
-        >
-          <div className="w-12 h-12 rounded-full bg-accent/10 flex items-center justify-center">
-            <TrendingUp className="text-accent" strokeWidth={1.5} size={24} />
-          </div>
-          <span className="text-xs text-slate-600">תכנון</span>
-        </motion.div>
-      </motion.div>
-    </motion.div>
+      ))}
+    </div>
   );
 }

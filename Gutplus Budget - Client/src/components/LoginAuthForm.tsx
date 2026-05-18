@@ -1,8 +1,8 @@
 import { useState } from 'react';
 import { motion } from 'framer-motion';
 import { Lock, ArrowLeft, Eye, EyeOff, ArrowRight, AlertCircle } from 'lucide-react';
-import { validatePasswordMatch } from '../utils/validation';
-import { signUp } from '../services/user.service';
+import { validatePasswordMatch, validatePasswordStrength } from '../utils/validation';
+import { signUp, login, resetPassword } from '../services/user.service';
 
 interface LoginAuthFormProps {
   email: string;
@@ -13,6 +13,9 @@ interface LoginAuthFormProps {
   setShowPassword: (show: boolean) => void;
   showConfirmPassword: boolean;
   setShowConfirmPassword: (show: boolean) => void;
+  isResetPassword?: boolean;
+  resetToken?: string;
+  onSuccess?: () => void;
 }
 
 /**
@@ -29,15 +32,22 @@ export default function LoginAuthForm({
   setShowPassword,
   showConfirmPassword,
   setShowConfirmPassword,
+  isResetPassword = false,
+  resetToken = '',
+  onSuccess,
 }: LoginAuthFormProps) {
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [passwordError, setPasswordError] = useState<string | null>(null);
+  const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
   const handlePasswordChange = (value: string) => {
     setPassword(value);
-    // Clear error on change
-    if (passwordError) {
+    // Validate password strength for new users
+    if (isNewUser && value) {
+      const error = validatePasswordStrength(value);
+      setPasswordError(error);
+    } else {
       setPasswordError(null);
     }
   };
@@ -46,35 +56,60 @@ export default function LoginAuthForm({
     setConfirmPassword(value);
     // Validate on change for new users
     if (isNewUser && value && password) {
-      const error = validatePasswordMatch(password, value);
-      setPasswordError(error);
-    } else {
-      setPasswordError(null);
+      // First validate password strength
+      const strengthError = validatePasswordStrength(password);
+      if (strengthError) {
+        setPasswordError(strengthError);
+      } else {
+        // Then check if passwords match
+        const matchError = validatePasswordMatch(password, value);
+        setPasswordError(matchError);
+      }
+    } else if (isNewUser && password) {
+      // If confirm password is empty, show password strength error if exists
+      const strengthError = validatePasswordStrength(password);
+      setPasswordError(strengthError);
     }
   };
 
   const handleSubmit = async(e: React.FormEvent) => {
     e.preventDefault();
-    
-    // Validate passwords for new users
-    if (isNewUser) {
-      const error = validatePasswordMatch(password, confirmPassword);
-      if (error) {
-        setPasswordError(error);
+
+    // Validate passwords for new users and reset password
+    if (isNewUser || isResetPassword) {
+      // Check password strength first
+      const strengthError = validatePasswordStrength(password);
+      if (strengthError) {
+        setPasswordError(strengthError);
+        return;
+      }
+
+      // Then check if passwords match
+      const matchError = validatePasswordMatch(password, confirmPassword);
+      if (matchError) {
+        setPasswordError(matchError);
         return;
       }
     }
 
-    await signUp(email, password).then((res:string) => {
-      
-      if(res==='success'){
-        console.log('User signed up successfully');
+    try {
+      if (isResetPassword && resetToken) {
+        await resetPassword(resetToken, password);
+        setSuccessMessage('הסיסמה אופסה בהצלחה! ניתן כעת להתחבר עם הסיסמה החדשה.');
+        setPassword('');
+        setConfirmPassword('');
+        setPasswordError(null);
+      } else if (isNewUser) {
+        await signUp(email, password);
+        onSuccess?.();
+      } else {
+        await login(email, password);
+        onSuccess?.();
       }
-    }).catch((error) => {
-      console.error('Error signing up:', error);
-    });
-
-    console.log('Form submitted');
+    } catch (error) {
+      console.error('Error:', error);
+      setPasswordError('אירעה שגיאה. אנא נסה שוב.');
+    }
   };
 
   return (
@@ -87,17 +122,47 @@ export default function LoginAuthForm({
       {/* Header */}
       <div className="space-y-2">
         <h1 className="heading-2">
-          {isNewUser ? 'יצירת חשבון' : 'כניסה'}
+          {isResetPassword ? 'איפוס סיסמה' : isNewUser ? 'יצירת חשבון' : 'כניסה'}
         </h1>
         <p className="body-text text-sm">{email}</p>
       </div>
 
-      {/* Form */}
-      <form onSubmit={handleSubmit} className="space-y-4">
-        {/* Password Field */}
+      {/* Success Message */}
+      {successMessage && (
+        <motion.div
+          className="space-y-4"
+          initial={{ opacity: 0, y: -8 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.2 }}
+        >
+          <div className="flex items-center gap-2.5 bg-green-50 border border-green-200 rounded-lg px-3 py-2.5 text-green-600 text-sm">
+            <span className="font-medium">{successMessage}</span>
+          </div>
+
+          {/* Back to Login Button */}
+          <button
+            type="button"
+            onClick={() => {
+              setSuccessMessage(null);
+              onBack();
+            }}
+            className="w-full bg-accent hover:bg-accent/90 text-white font-medium py-2.5 rounded-xl flex items-center justify-center gap-2 transition-all duration-300"
+          >
+            חזרה להתחברות
+            <ArrowLeft size={18} strokeWidth={1.5} />
+          </button>
+        </motion.div>
+      )}
+
+      {/* Form - Only show if no success message */}
+      {!successMessage && (
+        <>
+          {/* Form */}
+          <form onSubmit={handleSubmit} className="space-y-4">
+            {/* Password Field */}
         <div className="space-y-2">
           <label htmlFor="password" className="label-text">
-            {isNewUser ? 'הגדר סיסמה' : 'סיסמה'}
+            {isResetPassword ? 'סיסמה חדשה' : isNewUser ? 'הגדר סיסמה' : 'סיסמה'}
           </label>
           <div className="relative">
             <Lock
@@ -109,13 +174,19 @@ export default function LoginAuthForm({
               id="password"
               type={showPassword ? 'text' : 'password'}
               placeholder={
-                isNewUser
+                isResetPassword
+                  ? 'הזן סיסמה חדשה'
+                  : isNewUser
                   ? 'הזן סיסמה חזקה'
                   : 'הזן את הסיסמה שלך'
               }
               value={password}
               onChange={(e) => handlePasswordChange(e.target.value)}
-              className="w-full pl-10 pr-12 py-2 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-accent transition-all"
+              className={`w-full pl-10 pr-12 py-2 border rounded-xl focus:outline-none focus:ring-2 transition-all ${
+                (isNewUser || isResetPassword) && password && passwordError
+                  ? 'border-red-400 focus:ring-red-400'
+                  : 'border-slate-200 focus:ring-accent'
+              }`}
               required
             />
             <button
@@ -130,10 +201,21 @@ export default function LoginAuthForm({
               )}
             </button>
           </div>
+          {(isNewUser || isResetPassword) && password && passwordError && (
+            <motion.div
+              className="flex items-center gap-2.5 bg-red-50 border border-red-200 rounded-lg px-3 py-2.5 text-red-600 text-sm"
+              initial={{ opacity: 0, y: -8 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.2 }}
+            >
+              <AlertCircle size={16} strokeWidth={1.5} className="flex-shrink-0" />
+              <span className="font-medium">{passwordError}</span>
+            </motion.div>
+          )}
         </div>
 
-        {/* Confirm Password Field - Only for New Users */}
-        {isNewUser && (
+        {/* Confirm Password Field - Only for New Users and Reset Password */}
+        {(isNewUser || isResetPassword) && (
           <motion.div
             className="space-y-2"
             initial={{ opacity: 0, height: 0 }}
@@ -212,7 +294,7 @@ export default function LoginAuthForm({
           type="submit"
           className="w-full bg-accent hover:bg-accent/90 text-white font-medium py-2.5 rounded-xl flex items-center justify-center gap-2 transition-all duration-300 mt-6"
         >
-          {isNewUser ? 'צור חשבון' : 'התחבר'}
+          {isResetPassword ? 'איפוס סיסמה' : isNewUser ? 'צור חשבון' : 'התחבר'}
           <ArrowLeft size={18} strokeWidth={1.5} />
         </button>
       </form>
@@ -228,6 +310,8 @@ export default function LoginAuthForm({
         <ArrowRight size={18} strokeWidth={1.5} />
         <span className="text-sm font-medium">חזרה</span>
       </motion.button>
+        </>
+      )}
     </motion.div>
   );
 }

@@ -1,6 +1,7 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Mail, AlertCircle, ArrowLeft } from 'lucide-react';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import LoginVisualSide from '../components/LoginVisualSide';
 import LoginAuthForm from '../components/LoginAuthForm';
 import ForgotPasswordForm from '../components/ForgotPasswordForm';
@@ -16,12 +17,27 @@ import { checkEmail } from '../services/user.service';
  */
 
 export default function LoginPage() {
-    const [step, setStep] = useState<'email' | 'auth' | 'reset-password'>();
+    const [step, setStep] = useState<'email' | 'auth' | 'reset-password' | 'reset-password-form'>();
     const [email, setEmail] = useState('');
     const [emailError, setEmailError] = useState<string | null>(null);
     const [isNewUser, setIsNewUser] = useState(false);
     const [showPassword, setShowPassword] = useState(false);
     const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+    const [resetToken, setResetToken] = useState<string>('');
+    const [searchParams] = useSearchParams();
+    const navigate = useNavigate();
+
+    // Check for reset password URL params
+    useEffect(() => {
+        const token = searchParams.get('token');
+        const emailParam = searchParams.get('email');
+
+        if (token && emailParam) {
+            setResetToken(token);
+            setEmail(emailParam);
+            setStep('reset-password-form');
+        }
+    }, []);
 
     const handleEmailChange = (value: string) => {
         setEmail(value);
@@ -35,7 +51,6 @@ export default function LoginPage() {
         try {
 
             const resEmailChk = await checkEmail(email);
-            console.log('Email check response:', resEmailChk);
             if (resEmailChk.message == 'unauthorized user.') {
                 setEmailError('משתמש לא מזוהה במערכת, אנא פנה למשרדי גוטפלוס להרשמה');
             } 
@@ -43,7 +58,6 @@ export default function LoginPage() {
                 setEmailError(' חשבון פג תוקף. אנא פנה למשרדי גוטפלוס');
             } 
             else if (resEmailChk.message == 'Welcome back! User found.') {
-                console.log('Email check response:', resEmailChk);
                 setStep('auth');
                 setIsNewUser(false);
             }
@@ -195,9 +209,10 @@ export default function LoginPage() {
                                     setShowPassword={setShowPassword}
                                     showConfirmPassword={showConfirmPassword}
                                     setShowConfirmPassword={setShowConfirmPassword}
+                                    onSuccess={() => navigate('/dashboard', { replace: true })}
                                 />
                             </motion.div>
-                        ) : step === 'reset-password' && (
+                        ) : step === 'reset-password' ? (
                             <motion.div
                                 key="reset-step"
                                 variants={authStepVariants}
@@ -209,6 +224,27 @@ export default function LoginPage() {
                                 <ForgotPasswordForm
                                     email={email}
                                     onBack={handleBackFromReset}
+                                />
+                            </motion.div>
+                        ) : step === 'reset-password-form' && (
+                            <motion.div
+                                key="reset-password-form-step"
+                                variants={authStepVariants}
+                                initial="hidden"
+                                animate="visible"
+                                exit="exit"
+                                transition={{ duration: 0.3 }}
+                            >
+                                <LoginAuthForm
+                                    email={email}
+                                    isNewUser={true}
+                                    onBack={handleBackToEmail}
+                                    showPassword={showPassword}
+                                    setShowPassword={setShowPassword}
+                                    showConfirmPassword={showConfirmPassword}
+                                    setShowConfirmPassword={setShowConfirmPassword}
+                                    isResetPassword={true}
+                                    resetToken={resetToken}
                                 />
                             </motion.div>
                         )}
