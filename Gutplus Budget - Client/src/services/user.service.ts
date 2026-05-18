@@ -47,3 +47,45 @@ export const signUp = async (email: string, password: string): Promise<string> =
     throw error;
   }
 };
+
+export const forgotPassword = async (email: string): Promise<string> => {
+  try {
+    await axios.post(import.meta.env.VITE_SERVER_URL + "users/forgot-password", {
+      email,
+    });
+   
+    return 'success';
+    
+  } catch (error) {
+    console.error("Error during forgot password:", error);
+    throw error;
+  }
+};
+
+export const resetPassword = async (token: string, newPassword: string): Promise<string> => {
+  try {
+    await axios.post(import.meta.env.VITE_SERVER_URL + "tokens/reset-password", {
+      token,
+      newPassword,
+    });
+
+    return 'success';
+
+  } catch (error) {
+    console.error("Error during password reset:", error);
+    throw error;
+  }
+};
+
+export const login = async (email: string, password: string): Promise<string> => {
+  try {
+    await axios.post(import.meta.env.VITE_SERVER_URL + "users/login", {
+      email,
+      password,
+    });
+    return 'success';
+  } catch (error) {
+    console.error("Error during login:", error);
+    throw error;
+  }
+};
