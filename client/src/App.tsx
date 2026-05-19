@@ -1,8 +1,11 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider } from './context/AuthContext';
 import ProtectedRoute from './components/ProtectedRoute';
+import Layout from './components/Layout';
 import LoginPage from './pages/LoginPage';
-import DashboardPage from './pages/DashboardPage';
+import SnapshotPage from './pages/SnapshotPage';
+import ExpensesPage from './pages/ExpensesPage';
+import IncomePage from './pages/IncomePage';
 import './styles/index.css';
 
 function App() {
@@ -13,7 +16,13 @@ function App() {
           <Route path="/login" element={<LoginPage key="login" />} />
           <Route path="/reset-password" element={<LoginPage key="reset-password" />} />
           <Route element={<ProtectedRoute />}>
-            <Route path="/dashboard" element={<DashboardPage />} />
+            <Route element={<Layout />}>
+              <Route path="/snapshot" element={<SnapshotPage />} />
+              <Route path="/expenses" element={<ExpensesPage />} />
+              <Route path="/income" element={<IncomePage />} />
+            </Route>
+            <Route path="/dashboard" element={<Navigate to="/snapshot" replace />} />
+            <Route path="/" element={<Navigate to="/snapshot" replace />} />
           </Route>
           <Route path="*" element={<Navigate to="/login" replace />} />
         </Routes>

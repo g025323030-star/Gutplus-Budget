@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Clock, RefreshCw, LogOut } from 'lucide-react';
 
@@ -13,29 +13,54 @@ interface IdleWarningModalProps {
 export default function IdleWarningModal({ isVisible, onRenew, onLogout }: IdleWarningModalProps) {
   const [countdown, setCountdown] = useState(COUNTDOWN_SECONDS);
   const [isRenewing, setIsRenewing] = useState(false);
+  const tickRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  const endTimeRef = useRef<number>(0);
+  // Ref so the tick closure always calls the latest onLogout without stale capture
+  const onLogoutRef = useRef(onLogout);
+  // Guard against calling onLogout more than once per session
+  const didFireRef = useRef(false);
 
   useEffect(() => {
+    onLogoutRef.current = onLogout;
+  }, [onLogout]);
+
+  useEffect(() => {
+    clearTimeout(tickRef.current);
+
     if (!isVisible) {
       setCountdown(COUNTDOWN_SECONDS);
       setIsRenewing(false);
+      didFireRef.current = false;
       return;
     }
 
-    const interval = setInterval(() => {
-      setCountdown(prev => {
-        if (prev <= 1) {
-          clearInterval(interval);
-          onLogout();
-          return 0;
-        }
-        return prev - 1;
-      });
-    }, 1000);
+    // Fix 1: anchor to real clock so background-tab throttling can't slow the countdown
+    endTimeRef.current = Date.now() + COUNTDOWN_SECONDS * 1000;
+    didFireRef.current = false;
 
-    return () => clearInterval(interval);
+    const tick = () => {
+      const remaining = Math.max(0, Math.ceil((endTimeRef.current - Date.now()) / 1000));
+      setCountdown(remaining);
+
+      if (remaining <= 0) {
+        // Fix 2: call onLogout directly in the tick callback, NOT inside a setState updater
+        if (!didFireRef.current) {
+          didFireRef.current = true;
+          onLogoutRef.current();
+        }
+        return;
+      }
+
+      // Poll every 250 ms — accurate even when tab is throttled
+      tickRef.current = setTimeout(tick, 250);
+    };
+
+    tickRef.current = setTimeout(tick, 250);
+    return () => clearTimeout(tickRef.current);
   }, [isVisible]);
 
   const handleRenew = async () => {
+    clearTimeout(tickRef.current); // Stop countdown immediately on click
     setIsRenewing(true);
     await onRenew();
     setIsRenewing(false);
@@ -80,7 +105,7 @@ export default function IdleWarningModal({ isVisible, onRenew, onLogout }: IdleW
                 </button>
 
                 <button
-                  onClick={onLogout}
+                  onClick={() => onLogoutRef.current()}
                   className="w-full border border-slate-200 text-primary hover:bg-background/50 font-medium py-2.5 rounded-xl flex items-center justify-center gap-2 transition-all duration-300"
                 >
                   <LogOut size={18} strokeWidth={1.5} />
