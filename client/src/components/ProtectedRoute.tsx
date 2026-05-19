@@ -10,7 +10,7 @@ export default function ProtectedRoute() {
   const { checkAuth, logout } = useAuth();
   const navigate = useNavigate();
   const [status, setStatus] = useState<'loading' | 'ok' | 'denied'>('loading');
-  const { isIdle, resetTimer } = useIdleTimer(IDLE_TIMEOUT_MS);
+  const { isIdle, resume } = useIdleTimer(IDLE_TIMEOUT_MS);
 
   useEffect(() => {
     checkAuth().then(ok => setStatus(ok ? 'ok' : 'denied'));
@@ -19,7 +19,7 @@ export default function ProtectedRoute() {
   const handleRenew = async () => {
     const ok = await checkAuth();
     if (ok) {
-      resetTimer();
+      resume(); // Unpause activity tracking and restart the 5-minute idle timer
     } else {
       await logout();
       navigate('/login', { replace: true });

@@ -21,14 +21,14 @@ export const getEmailErrorMessage = (email: string): string | null => {
 
 /**
  * Validate password strength
- * Must contain: minimum 6 characters, at least one letter, at least one digit
+ * Must contain: minimum 8 characters, at least one letter, at least one digit
  */
 export const validatePasswordStrength = (password: string): string | null => {
   if (!password) {
     return 'אנא הזן סיסמה';
   }
-  if (password.length < 6) {
-    return 'הסיסמה חייבת להכיל לפחות 6 תווים';
+  if (password.length < 8) {
+    return 'הסיסמה חייבת להכיל לפחות 8 תווים';
   }
   if (!/[a-zA-Z]/.test(password)) {
     return 'הסיסמה חייבת להכיל אותיות באנגלית';
