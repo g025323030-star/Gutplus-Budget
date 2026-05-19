@@ -1,7 +1,6 @@
 import { Request, Response } from 'express';
 import { tokenService } from '../services/token.service';
 import { userService } from '../services/user.service';
-import { hashPassword } from '../utils/password.utils';
 
 export class TokenController {
   async createResetToken(userId: string): Promise<string> {
@@ -23,11 +22,8 @@ export class TokenController {
         return res.status(400).json({ message: 'Invalid or expired token' });
       }
 
-      // הצפנת הסיסמא החדשה
-      const hashedPassword = await hashPassword(newPassword);
-
       // עדכון הסיסמא של המשתמש
-      await userService.update(user.id, { password: hashedPassword });
+      await userService.update(user.id, { password: newPassword });
 
       // מחיקת הטוקן לאחר השימוש
       await tokenService.deleteResetToken(token);

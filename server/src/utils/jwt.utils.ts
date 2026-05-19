@@ -26,9 +26,9 @@ export const cookieOptions:Cookie={
     name: 'token',
     options: {
       httpOnly: true,
-      secure: true,
-      sameSite: 'strict',
-      maxAge: 3600000 
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'lax',
+      maxAge: 3600000
     }
 }
       

@@ -106,7 +106,11 @@ if(!user){
         res.status(401).json({ success: false, message: 'Invalid credentials' });
         return;
       }
+      console.log("[Login] Password from request:", password);
+      console.log("[Login] Hashed password from DB:", user.password);
+      console.log("[Login] DB password length:", user.password.length);
       const isMatch = await comparePassword(password, user.password);
+      console.log("[Login] bcrypt.compare result:", isMatch);
       if (!isMatch) {
         console.log("Password mismatch for email:", email);
         res.status(401).json({ success: false, message: 'Invalid credentials' });

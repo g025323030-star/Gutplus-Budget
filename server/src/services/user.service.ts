@@ -52,11 +52,17 @@ export class UserService {
     // Hash password if being updated
     let updateData = { ...updateUserDto };
     if (updateData.password) {
+      console.log('[UserService.update] Plain password received:', updateData.password);
       updateData.password = await hashPassword(updateData.password);
+      console.log('[UserService.update] Hashed password to save:', updateData.password);
     }
-    
+
     await this.userRepository.update(id, updateData);
-    return await this.findOne(id);
+    const updatedUser = await this.findOne(id);
+    if (updateUserDto.password) {
+      console.log('[UserService.update] Password in DB after save:', updatedUser?.password);
+    }
+    return updatedUser;
   }
 
   async remove(id: string): Promise<void> {
