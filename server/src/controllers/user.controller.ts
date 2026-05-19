@@ -3,7 +3,7 @@ import { userService } from '../services';
 import { CreateUserDto, UpdateUserDto } from '../dto/user.dto';
 import { generateSignInToken, cookieOptions } from '../utils/jwt.utils';
 import { sendEmail } from '../utils/sendEmail';
-import { hashPassword, comparePassword } from '../utils/password.utils';
+import { comparePassword } from '../utils/password.utils';
 import { resetPasswordEmailTemplate, formatResetPasswordEmailTemplate } from '../templates/emailTemp';
 import { tokenController } from './token.controller';
 
@@ -86,8 +86,7 @@ if(!user){
         });
         return;
       }
-      const hashedPassword = await hashPassword(password);
-      await userService.update(user.id, { password: hashedPassword });
+      await userService.update(user.id, { password });
       const token = generateSignInToken(user.id);
       res.cookie(cookieOptions.name, token, cookieOptions.options);
       res.status(200).send({ message: "Logged in successfully" });
@@ -99,13 +98,17 @@ if(!user){
   async login(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
       const { email, password } = req.body;
+      console.log("Login attempt for email:", email);
+      console.log("Password provided:", password );
       const user = await userService.findByEmail(email);
       if (!user || !user.password) {
+        console.log("User not found or password missing for email:", email);
         res.status(401).json({ success: false, message: 'Invalid credentials' });
         return;
       }
       const isMatch = await comparePassword(password, user.password);
       if (!isMatch) {
+        console.log("Password mismatch for email:", email);
         res.status(401).json({ success: false, message: 'Invalid credentials' });
         return;
       }
