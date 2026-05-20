@@ -124,8 +124,18 @@ if(!user){
     }
   }
 
-  async me(req: Request, res: Response): Promise<void> {
-    res.status(200).json({ id: (req as any).user.id });
+  async me(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const userId = (req as any).user.id;
+      const user = await userService.findOne(userId);
+      const householdId = user?.households?.[0]?.id ?? null;
+      res.status(200).json({
+        success: true,
+        data: { id: userId, householdId },
+      });
+    } catch (error) {
+      next(error);
+    }
   }
 
   async logout(_req: Request, res: Response): Promise<void> {
@@ -147,7 +157,7 @@ if(!user){
       }
 
       const token = await tokenController.createResetToken(user.id);
-      const resetLink = `${process.env.FRONTEND_URL || 'http://localhost:5174'}/reset-password?token=${encodeURIComponent(token)}&email=${encodeURIComponent(email)}`;
+      const resetLink = `${process.env.FRONTEND_URL || 'http://localhost:5174' || 'http://localhost:5173'}/reset-password?token=${encodeURIComponent(token)}&email=${encodeURIComponent(email)}`;
       const html = formatResetPasswordEmailTemplate(resetLink);
 
       await sendEmail({

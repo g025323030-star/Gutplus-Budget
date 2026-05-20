@@ -37,11 +37,36 @@ export class TransactionService {
   }
 
   async update(id: string, updateTransactionDto: UpdateTransactionDto): Promise<Transaction | null> {
-    const { date, ...rest } = updateTransactionDto;
-    await this.transactionRepository.update(id, {
-      ...rest,
-      ...(date !== undefined ? { date: new Date(date) } : {}),
-    });
+    const existing = await this.findOne(id);
+    if (!existing) return null;
+
+    if (updateTransactionDto.amount !== undefined) {
+      existing.amount = updateTransactionDto.amount;
+    }
+    if (updateTransactionDto.date !== undefined) {
+      existing.date = new Date(updateTransactionDto.date);
+    }
+    if (updateTransactionDto.description !== undefined) {
+      existing.description = updateTransactionDto.description;
+    }
+    if (updateTransactionDto.isCleared !== undefined) {
+      existing.isCleared = updateTransactionDto.isCleared;
+    }
+    if (updateTransactionDto.householdId !== undefined) {
+      existing.household = { id: updateTransactionDto.householdId } as any;
+    }
+    if (updateTransactionDto.categoryId !== undefined) {
+      existing.category = updateTransactionDto.categoryId
+        ? ({ id: updateTransactionDto.categoryId } as any)
+        : null;
+    }
+    if (updateTransactionDto.accountId !== undefined) {
+      existing.account = updateTransactionDto.accountId
+        ? ({ id: updateTransactionDto.accountId } as any)
+        : null;
+    }
+
+    await this.transactionRepository.save(existing);
     return await this.findOne(id);
   }
 
