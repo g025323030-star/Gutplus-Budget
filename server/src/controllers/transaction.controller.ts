@@ -1,5 +1,5 @@
 import { Request, Response, NextFunction } from 'express';
-import { transactionService } from '../services';
+import { transactionService, householdService } from '../services';
 import { CreateTransactionDto, UpdateTransactionDto } from '../dto';
 
 export class TransactionController {
@@ -18,7 +18,19 @@ export class TransactionController {
 
   async findAll(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
-      const transactions = await transactionService.findAll();
+      const userId = (req as any).user?.id;
+      if (!userId) {
+        res.status(401).json({ success: false, message: 'Unauthorized' });
+        return;
+      }
+
+      const household = await householdService.findByUserId(userId);
+      if (!household) {
+        res.status(404).json({ success: false, message: 'Household not found' });
+        return;
+      }
+
+      const transactions = await transactionService.findAll(household.id);
       res.status(200).json({
         success: true,
         data: transactions,

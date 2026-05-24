@@ -1,11 +1,10 @@
 import { z } from 'zod';
-import { CategoryFrequency, CategoryType } from '../enums';
+import { CategoryType } from '../enums';
 import { uuidSchema } from './common.schemas';
 
 export const createCategorySchema = z.object({
   name: z.string().min(1).max(255),
   type: z.nativeEnum(CategoryType),
-  frequency: z.nativeEnum(CategoryFrequency),
   householdId: uuidSchema.optional(),
   parentCategoryId: uuidSchema.optional(),
 });

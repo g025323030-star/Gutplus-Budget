@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { AlertCircle, LayoutDashboard } from 'lucide-react';
-import { CategoryType } from '@gutplus/shared';
+import { CategoryFrequency, CategoryType } from '@gutplus/shared';
 import type { BudgetPlan, Category, Transaction } from '@gutplus/shared';
 import { ICON_STROKE } from '../constants/ui';
 import { getTransactions } from '../services/transactions.service';
@@ -126,7 +126,12 @@ export default function SnapshotPage() {
   const { incomeTotal, expenseTotal } = useMemo(() => {
     let income = 0;
     let expense = 0;
+    const targetFrequency =
+      mode === 'monthly'
+        ? CategoryFrequency.MONTHLY
+        : CategoryFrequency.YEARLY;
     periodTransactions.forEach((tx) => {
+      if (tx.frequency !== targetFrequency) return;
       if (!tx.categoryId) return;
       const category = categoryById.get(tx.categoryId);
       if (!category) return;
@@ -135,7 +140,7 @@ export default function SnapshotPage() {
       else if (category.type === CategoryType.EXPENSE) expense += amount;
     });
     return { incomeTotal: income, expenseTotal: expense };
-  }, [periodTransactions, categoryById]);
+  }, [periodTransactions, categoryById, mode]);
 
   const balance = incomeTotal - expenseTotal;
 
@@ -179,6 +184,7 @@ export default function SnapshotPage() {
               <CategoryPieChart
                 transactions={periodTransactions}
                 categoryById={categoryById}
+                mode={mode}
               />
               <SnapshotCalendar
                 mode={mode}

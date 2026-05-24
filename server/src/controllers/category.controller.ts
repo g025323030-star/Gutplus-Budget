@@ -1,5 +1,5 @@
 import { Request, Response, NextFunction } from 'express';
-import { categoryService } from '../services';
+import { categoryService, householdService } from '../services';
 import { CreateCategoryDto, UpdateCategoryDto } from '../dto';
 
 export class CategoryController {
@@ -18,7 +18,19 @@ export class CategoryController {
 
   async findAll(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
-      const categories = await categoryService.findAll();
+      const userId = (req as any).user?.id;
+      if (!userId) {
+        res.status(401).json({ success: false, message: 'Unauthorized' });
+        return;
+      }
+
+      const household = await householdService.findByUserId(userId);
+      if (!household) {
+        res.status(404).json({ success: false, message: 'Household not found' });
+        return;
+      }
+
+      const categories = await categoryService.findAll(household.id);
       res.status(200).json({
         success: true,
         data: categories,

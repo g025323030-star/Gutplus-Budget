@@ -8,13 +8,16 @@ import {
   Tooltip,
 } from 'recharts';
 import { PieChart as PieChartIcon } from 'lucide-react';
-import { CategoryType } from '@gutplus/shared';
+import { CategoryFrequency, CategoryType } from '@gutplus/shared';
 import type { Category, Transaction } from '@gutplus/shared';
 import { ICON_STROKE } from '../../constants/ui';
+
+type PeriodMode = 'monthly' | 'yearly';
 
 interface CategoryPieChartProps {
   transactions: Transaction[];
   categoryById: Map<string, Category>;
+  mode: PeriodMode;
 }
 
 const PALETTE = [
@@ -39,18 +42,23 @@ const currencyFormatter = new Intl.NumberFormat('he-IL', {
 export default function CategoryPieChart({
   transactions,
   categoryById,
+  mode,
 }: CategoryPieChartProps) {
   const data = useMemo(() => {
     const totals = new Map<string, number>();
 
+    const targetFrequency =
+      mode === 'monthly'
+        ? CategoryFrequency.MONTHLY
+        : CategoryFrequency.YEARLY;
     transactions.forEach((tx) => {
+      if (tx.frequency !== targetFrequency) return;
       if (!tx.categoryId) return;
       const category = categoryById.get(tx.categoryId);
       if (!category || category.type !== CategoryType.EXPENSE) return;
 
-      const parentKey = category.parentCategoryId ?? category.id;
       const amount = parseFloat(tx.amount) || 0;
-      totals.set(parentKey, (totals.get(parentKey) ?? 0) + amount);
+      totals.set(category.id, (totals.get(category.id) ?? 0) + amount);
     });
 
     return Array.from(totals.entries())
@@ -59,7 +67,7 @@ export default function CategoryPieChart({
         value,
       }))
       .sort((a, b) => b.value - a.value);
-  }, [transactions, categoryById]);
+  }, [transactions, categoryById, mode]);
 
   const isEmpty = data.length === 0;
 

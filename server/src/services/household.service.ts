@@ -27,7 +27,9 @@ export class HouseholdService {
     return await this.householdRepository.findOne({ where: { id } });
   }
 
-
+  async findByUserId(userId: string): Promise<Household | null> {
+    return await this.householdRepository.findOne({ where: { user: { id: userId } } });
+  }
 
   async update(id: string, updateHouseholdDto: UpdateHouseholdDto): Promise<Household | null> {
     await this.householdRepository.update(id, updateHouseholdDto);

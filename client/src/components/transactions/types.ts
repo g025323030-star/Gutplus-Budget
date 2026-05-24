@@ -10,6 +10,7 @@ export interface DraftRowSnapshot {
 export interface DraftRow extends DraftRowSnapshot {
   localId: string;
   serverId: string | null;
+  installmentsTotal: number | null;
   status: RowStatus;
   errorMessage: string | null;
   lastSavedSnapshot: DraftRowSnapshot | null;

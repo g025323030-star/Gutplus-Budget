@@ -33,14 +33,6 @@ export class Category {
   })
   type!: CategoryType;
 
-  @Column({
-    name: 'frequency',
-    type: 'enum',
-    enum: CategoryFrequency,
-    enumName: 'category_frequency_enum',
-  })
-  frequency!: CategoryFrequency;
-
   @Index('IDX_category_household')
   @ManyToOne(() => Household, household => household.categories, {
     nullable: true,

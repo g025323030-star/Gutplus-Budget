@@ -92,7 +92,7 @@ export const login = async (email: string, password: string): Promise<string> =>
 
 export const completeOnboarding = async (): Promise<string> => {
   try {
-    await axios.patch(
+    await axios.post(
       import.meta.env.VITE_SERVER_URL + "users/complete-onboarding",
     );
     return 'success';

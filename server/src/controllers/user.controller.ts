@@ -142,6 +142,7 @@ if(!user){
   async completeOnboarding(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
       const userId = (req as any).user.id;
+      console.log("Looking for user ID:", userId); // שורת בדיקה
       const user = await userService.findOne(userId);
       if (!user) {
         res.status(404).json({ success: false, message: 'User not found' });

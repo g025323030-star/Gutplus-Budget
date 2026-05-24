@@ -1,5 +1,5 @@
 import axios from 'axios';
-import { ENDPOINTS } from '@gutplus/shared';
+import { CategoryFrequency, ENDPOINTS } from '@gutplus/shared';
 import type {
   CreateTransactionInput,
   Transaction,
@@ -15,6 +15,10 @@ interface RawTransaction {
   date: string;
   description: string;
   isCleared: boolean;
+  frequency: CategoryFrequency;
+  installmentsTotal?: number | null;
+  installmentIndex?: number | null;
+  installmentGroupId?: string | null;
   household?: { id: string } | null;
   category?: { id: string } | null;
   account?: { id: string } | null;
@@ -31,6 +35,10 @@ const normalizeTransaction = (raw: RawTransaction): Transaction => ({
   date: raw.date,
   description: raw.description,
   isCleared: raw.isCleared,
+  frequency: raw.frequency ?? CategoryFrequency.MONTHLY,
+  installmentsTotal: raw.installmentsTotal ?? null,
+  installmentIndex: raw.installmentIndex ?? null,
+  installmentGroupId: raw.installmentGroupId ?? null,
   householdId: raw.household?.id ?? raw.householdId ?? '',
   categoryId: raw.category?.id ?? raw.categoryId ?? null,
   accountId: raw.account?.id ?? raw.accountId ?? null,
@@ -50,6 +58,32 @@ export const getTransactions = async (
   const list = (res.data.data as RawTransaction[]) ?? [];
   return list.map(normalizeTransaction);
 };
+
+// export const getTransactions = async (
+//   month?: number,
+//   year?: number,
+// ): Promise<Transaction[]> => {
+//   try {
+//     // בניית אובייקט הפרמטרים - אקסיוס יסנן אוטומטית ערכים שהם undefined
+//     const params: Record<string, number> = {};
+//     if (month !== undefined) params.month = month;
+//     if (year !== undefined) params.year = year;
+
+//     // ביצוע הקריאה דרך ה-api המוגדר עם העוגיות
+//     const res = await axios.get(ENDPOINTS.transactions.base, { params });
+    
+//     // שליפת המערך והגנה מפני ערך חסר
+//     const list = (res.data?.data as RawTransaction[]) ?? [];
+    
+//     // נורמליזציה של הנתונים והחזרתם
+//     return list.map(normalizeTransaction);
+
+//   } catch (error) {
+//     console.error("Error fetching transactions:", error);
+//     // זריקת השגיאה הלאה כדי שהקומפוננטה האבא (SnapshotPage) תוכל להציג את ה-ErrorBlock
+//     throw error; 
+//   }
+// };
 
 export const createTransaction = async (
   input: CreateTransactionInput,

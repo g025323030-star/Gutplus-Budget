@@ -8,6 +8,7 @@ import {
   PrimaryGeneratedColumn,
   UpdateDateColumn,
 } from 'typeorm';
+import { CategoryFrequency } from '@gutplus/shared';
 import { Account } from './account.entity';
 import { Category } from './category.entity';
 import { Household } from './household.entity';
@@ -34,6 +35,25 @@ export class Transaction {
 
   @Column({ name: 'is_cleared', type: 'boolean', default: false })
   isCleared!: boolean;
+
+  @Column({
+    name: 'frequency',
+    type: 'enum',
+    enum: CategoryFrequency,
+    enumName: 'transaction_frequency_enum',
+    default: CategoryFrequency.MONTHLY,
+  })
+  frequency!: CategoryFrequency;
+
+  @Column({ name: 'installments_total', type: 'int', nullable: true })
+  installmentsTotal!: number | null;
+
+  @Column({ name: 'installment_index', type: 'int', nullable: true })
+  installmentIndex!: number | null;
+
+  @Index('IDX_transaction_installment_group')
+  @Column({ name: 'installment_group_id', type: 'uuid', nullable: true })
+  installmentGroupId!: string | null;
 
   @Index('IDX_transaction_household')
   @ManyToOne(() => Household, household => household.transactions, {

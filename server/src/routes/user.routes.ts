@@ -31,12 +31,12 @@ router.post(
   validate(forgotPasswordSchema),
   userController.forgotPassword.bind(userController),
 );
-router.get('/me', authGuard, userController.me.bind(userController));
-router.patch(
+router.post(
   '/complete-onboarding',
   authGuard,
   userController.completeOnboarding.bind(userController),
 );
 router.post('/logout', authGuard, userController.logout.bind(userController));
+router.get('/me', authGuard, userController.me.bind(userController));
 
 export default router;

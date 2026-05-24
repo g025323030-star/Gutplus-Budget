@@ -1,6 +1,6 @@
 import { useMemo } from 'react';
 import { ArrowDownCircle, ArrowUpCircle, BarChart3 } from 'lucide-react';
-import { CategoryType } from '@gutplus/shared';
+import { CategoryFrequency, CategoryType } from '@gutplus/shared';
 import type { Category, Transaction } from '@gutplus/shared';
 import { ICON_STROKE } from '../../constants/ui';
 
@@ -52,12 +52,17 @@ const buildRows = (
   transactions: Transaction[],
   categoryById: Map<string, Category>,
   type: CategoryType,
-): RowEntry[] =>
-  transactions
+  mode: PeriodMode,
+): RowEntry[] => {
+  const targetFrequency =
+    mode === 'monthly' ? CategoryFrequency.MONTHLY : CategoryFrequency.YEARLY;
+  return transactions
     .filter((tx) => {
+      if (tx.frequency !== targetFrequency) return false;
       if (!tx.categoryId) return false;
       const category = categoryById.get(tx.categoryId);
-      return category?.type === type;
+      if (!category || category.type !== type) return false;
+      return true;
     })
     .map((tx) => {
       const category = tx.categoryId
@@ -73,6 +78,7 @@ const buildRows = (
     })
     .sort((a, b) => b.amount - a.amount)
     .slice(0, 10);
+};
 
 interface MonthlyTotals {
   month: number;
@@ -230,12 +236,12 @@ export default function TransactionsList({
   year,
 }: TransactionsListProps) {
   const topExpenses = useMemo(
-    () => buildRows(transactions, categoryById, CategoryType.EXPENSE),
-    [transactions, categoryById],
+    () => buildRows(transactions, categoryById, CategoryType.EXPENSE, mode),
+    [transactions, categoryById, mode],
   );
   const topIncome = useMemo(
-    () => buildRows(transactions, categoryById, CategoryType.INCOME),
-    [transactions, categoryById],
+    () => buildRows(transactions, categoryById, CategoryType.INCOME, mode),
+    [transactions, categoryById, mode],
   );
   const monthlyTotals = useMemo(
     () =>

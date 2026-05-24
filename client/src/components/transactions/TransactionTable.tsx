@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef } from 'react';
 import axios from 'axios';
 import { AnimatePresence, motion } from 'framer-motion';
 import { AlertTriangle, Plus, Receipt } from 'lucide-react';
-import type { Category } from '@gutplus/shared';
+import type { Category, CategoryFrequency } from '@gutplus/shared';
 import { ICON_STROKE } from '../../constants/ui';
 import {
   createTransaction,
@@ -39,20 +39,28 @@ interface TransactionTableProps {
   rows: DraftRow[];
   categories: Category[];
   householdId: string;
+  frequency: CategoryFrequency;
   monthConstraint?: number;
   yearConstraint: number;
   onChange: (rows: DraftRow[]) => void;
   isLoading?: boolean;
+  onAddCategoryRequest?: (localId: string) => void;
+  onInstallmentsRequest?: (localId: string) => void;
+  onAfterInstallmentsSave?: () => void;
 }
 
 export default function TransactionTable({
   rows,
   categories,
   householdId,
+  frequency,
   monthConstraint,
   yearConstraint,
   onChange,
   isLoading = false,
+  onAddCategoryRequest,
+  onInstallmentsRequest,
+  onAfterInstallmentsSave,
 }: TransactionTableProps) {
   const rowsRef = useRef<DraftRow[]>(rows);
   const pendingResave = useRef<Record<string, boolean>>({});
@@ -131,12 +139,20 @@ export default function TransactionTable({
 
       try {
         let savedId = current.serverId;
+        const isInstallments =
+          !savedId &&
+          current.installmentsTotal !== null &&
+          current.installmentsTotal >= 2;
         const payload = {
           amount: current.amount,
           date: current.date,
           description: current.description.trim(),
+          frequency,
           householdId,
           categoryId: current.categoryId ?? undefined,
+          ...(isInstallments
+            ? { installmentsTotal: current.installmentsTotal! }
+            : {}),
         };
 
         if (savedId) {
@@ -154,6 +170,10 @@ export default function TransactionTable({
         });
         scheduleSyncedFade(localId);
 
+        if (isInstallments) {
+          onAfterInstallmentsSave?.();
+        }
+
         if (pendingResave.current[localId]) {
           pendingResave.current[localId] = false;
           await persistRow(localId);
@@ -167,10 +187,12 @@ export default function TransactionTable({
     },
     [
       householdId,
+      frequency,
       monthConstraint,
       yearConstraint,
       patchRow,
       scheduleSyncedFade,
+      onAfterInstallmentsSave,
     ],
   );
 
@@ -215,7 +237,6 @@ export default function TransactionTable({
   );
 
   const handleAddRow = useCallback(() => {
-    if (categories.length === 0) return;
     const localId =
       typeof crypto !== 'undefined' && 'randomUUID' in crypto
         ? crypto.randomUUID()
@@ -223,6 +244,7 @@ export default function TransactionTable({
     const newRow: DraftRow = {
       localId,
       serverId: null,
+      installmentsTotal: null,
       description: '',
       categoryId: null,
       amount: '',
@@ -235,7 +257,7 @@ export default function TransactionTable({
     const next = [...rowsRef.current, newRow];
     rowsRef.current = next;
     onChange(next);
-  }, [categories.length, monthConstraint, yearConstraint, onChange]);
+  }, [monthConstraint, yearConstraint, onChange]);
 
   const errorCount = useMemo(
     () => rows.filter((r) => r.status === 'error').length,
@@ -259,10 +281,9 @@ export default function TransactionTable({
         <motion.button
           type="button"
           onClick={handleAddRow}
-          disabled={noCategories}
-          whileHover={noCategories ? undefined : { scale: 1.02 }}
-          whileTap={noCategories ? undefined : { scale: 0.98 }}
-          className="bg-accent text-white px-4 py-2 rounded-xl label-text shadow-sm hover:shadow-md hover:bg-accent/90 disabled:bg-slate-300 disabled:cursor-not-allowed disabled:shadow-none transition-all duration-200 flex items-center gap-2"
+          whileHover={{ scale: 1.02 }}
+          whileTap={{ scale: 0.98 }}
+          className="bg-accent text-white px-4 py-2 rounded-xl label-text shadow-sm hover:shadow-md hover:bg-accent/90 transition-all duration-200 flex items-center gap-2"
         >
           <Plus size={18} strokeWidth={ICON_STROKE} />
           הוסף שורה
@@ -303,7 +324,8 @@ export default function TransactionTable({
         {noCategories && !isLoading && (
           <div className="py-10 text-center">
             <p className="body-text text-slate-500">
-              כדי להוסיף הוצאות, יש ליצור קודם קטגוריה מסוג "הוצאה".
+              אין קטגוריות זמינות. הוסף שורה ולחץ "+ הוסף קטגוריה חדשה"
+              ברשימת הקטגוריות כדי ליצור קטגוריה ראשונה.
             </p>
           </div>
         )}
@@ -345,6 +367,16 @@ export default function TransactionTable({
               onBlurOutside={() => persistRow(row.localId)}
               onRemove={() => handleRowRemove(row.localId)}
               onRetry={() => persistRow(row.localId)}
+              onAddCategoryRequest={
+                onAddCategoryRequest
+                  ? () => onAddCategoryRequest(row.localId)
+                  : undefined
+              }
+              onInstallmentsRequest={
+                onInstallmentsRequest
+                  ? () => onInstallmentsRequest(row.localId)
+                  : undefined
+              }
             />
           ))}
         </AnimatePresence>

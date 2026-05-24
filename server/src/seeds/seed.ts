@@ -170,38 +170,34 @@ async function seedDatabase() {
 
     console.log('✅ Accounts created');
 
-    // Create Categories
+    // Create Categories (global defaults — no household, no frequency)
     console.log('🏷️ Creating categories...');
     const categoryRepository = AppDataSource.getRepository(Category);
     const expenseCategory = await categoryRepository.save({
       name: 'הוצאות ביתיות',
       type: CategoryType.EXPENSE,
-      frequency: CategoryFrequency.MONTHLY,
-      household: household1,
+      household: null,
       parentCategory: null,
     });
 
     const groceryCategory = await categoryRepository.save({
       name: 'מכולת',
       type: CategoryType.EXPENSE,
-      frequency: CategoryFrequency.MONTHLY,
-      household: household1,
+      household: null,
       parentCategory: expenseCategory,
     });
 
     const utilityCategory = await categoryRepository.save({
       name: 'חשמל ומים',
       type: CategoryType.EXPENSE,
-      frequency: CategoryFrequency.MONTHLY,
-      household: household1,
+      household: null,
       parentCategory: expenseCategory,
     });
 
     const incomeCategory = await categoryRepository.save({
       name: 'הכנסות',
       type: CategoryType.INCOME,
-      frequency: CategoryFrequency.MONTHLY,
-      household: household1,
+      household: null,
       parentCategory: null,
     });
 
@@ -220,6 +216,7 @@ async function seedDatabase() {
         date: today,
         description: 'קנייה במכולת',
         isCleared: true,
+        frequency: CategoryFrequency.MONTHLY,
         household: household1,
         category: groceryCategory,
         account: account1,
@@ -229,6 +226,7 @@ async function seedDatabase() {
         date: sevenDaysAgo,
         description: 'בדק מים וחשמל',
         isCleared: true,
+        frequency: CategoryFrequency.MONTHLY,
         household: household1,
         category: utilityCategory,
         account: account1,
@@ -238,6 +236,7 @@ async function seedDatabase() {
         date: thirtyDaysAgo,
         description: 'שכר חודשי',
         isCleared: true,
+        frequency: CategoryFrequency.MONTHLY,
         household: household1,
         category: incomeCategory,
         account: account1,
@@ -247,6 +246,7 @@ async function seedDatabase() {
         date: today,
         description: 'תשלום כרטיס אשראי',
         isCleared: false,
+        frequency: CategoryFrequency.MONTHLY,
         household: household1,
         category: null,
         account: account2,

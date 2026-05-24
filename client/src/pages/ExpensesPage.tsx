@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { motion } from 'framer-motion';
 import { AlertCircle, TrendingDown } from 'lucide-react';
-import { CategoryType } from '@gutplus/shared';
+import { CategoryFrequency, CategoryType } from '@gutplus/shared';
 import type { Category, Transaction } from '@gutplus/shared';
 import { ICON_STROKE } from '../constants/ui';
 import { useCurrentUser } from '../hooks/useCurrentUser';
@@ -11,6 +11,8 @@ import PeriodToggle from '../components/snapshot/PeriodToggle';
 import type { PeriodMode } from '../components/snapshot/PeriodToggle';
 import TransactionTable from '../components/transactions/TransactionTable';
 import type { DraftRow } from '../components/transactions/types';
+import CategoryFormModal from '../components/transactions/CategoryFormModal';
+import InstallmentsModal from '../components/transactions/InstallmentsModal';
 import HolidayExpensesSection from '../components/expenses/HolidayExpensesSection';
 
 const PAGE_VARIANTS = {
@@ -57,6 +59,7 @@ const txToDraftRow = (tx: Transaction): DraftRow => {
   return {
     localId: newLocalId(),
     serverId: tx.id,
+    installmentsTotal: tx.installmentsTotal,
     description,
     categoryId,
     amount,
@@ -67,15 +70,66 @@ const txToDraftRow = (tx: Transaction): DraftRow => {
   };
 };
 
+const STARTER_EXPENSE_NAMES_MONTHLY = [
+  'חשמל ומים',
+  'אינטרנט וטלפון',
+  'מכולת',
+  'דלק',
+  'מסעדות',
+];
+
+const STARTER_EXPENSE_NAMES_YEARLY = [
+  'ארנונה',
+  'ביטוח רכב',
+  'ביטוח דירה',
+  'חופשה משפחתית',
+];
+
+const buildStarterRows = (
+  expenseCategories: Category[],
+  existingCategoryIds: Set<string>,
+  mode: PeriodMode,
+  year: number,
+  month?: number,
+): DraftRow[] => {
+  const names =
+    mode === 'monthly'
+      ? STARTER_EXPENSE_NAMES_MONTHLY
+      : STARTER_EXPENSE_NAMES_YEARLY;
+  const padTwo = (n: number): string => String(n).padStart(2, '0');
+  const defaultDate = month
+    ? `${year}-${padTwo(month)}-01`
+    : `${year}-01-01`;
+  return names
+    .map((name) => expenseCategories.find((c) => c.name === name))
+    .filter(
+      (c): c is Category => Boolean(c) && !existingCategoryIds.has(c!.id),
+    )
+    .map((category) => ({
+      localId: newLocalId(),
+      serverId: null,
+      installmentsTotal: null,
+      description: '',
+      categoryId: category.id,
+      amount: '',
+      date: defaultDate,
+      status: 'idle',
+      errorMessage: null,
+      lastSavedSnapshot: null,
+    }));
+};
+
 const filterToExpenses = (
   transactions: Transaction[],
   categoryById: Map<string, Category>,
   householdId: string,
+  frequency: CategoryFrequency,
   yearConstraint: number,
   monthConstraint?: number,
 ): Transaction[] =>
   transactions.filter((tx) => {
     if (tx.householdId !== householdId) return false;
+    if (tx.frequency !== frequency) return false;
     const category = tx.categoryId ? categoryById.get(tx.categoryId) : null;
     if (!category || category.type !== CategoryType.EXPENSE) return false;
     const d = new Date(tx.date);
@@ -97,6 +151,13 @@ export default function ExpensesPage() {
   const [categories, setCategories] = useState<Category[]>([]);
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
+  const [addCategoryTargetRow, setAddCategoryTargetRow] = useState<
+    string | null
+  >(null);
+  const [installmentsTargetRow, setInstallmentsTargetRow] = useState<
+    string | null
+  >(null);
+  const [reloadKey, setReloadKey] = useState(0);
 
   const {
     householdId,
@@ -137,12 +198,32 @@ export default function ExpensesPage() {
           tx,
           localCategoryById,
           householdId,
+          mode === 'monthly'
+            ? CategoryFrequency.MONTHLY
+            : CategoryFrequency.YEARLY,
+          selectedYear,
+          monthConstraint,
+        );
+
+        const realRows = filtered.map(txToDraftRow);
+        const existingCategoryIds = new Set(
+          realRows
+            .map((r) => r.categoryId)
+            .filter((id): id is string => id !== null),
+        );
+        const expenseCats = cats.filter(
+          (c) => c.type === CategoryType.EXPENSE,
+        );
+        const starters = buildStarterRows(
+          expenseCats,
+          existingCategoryIds,
+          mode,
           selectedYear,
           monthConstraint,
         );
 
         setCategories(cats);
-        setRows(filtered.map(txToDraftRow));
+        setRows([...realRows, ...starters]);
       } catch (err) {
         if (cancelled) return;
         console.error('Error loading expenses:', err);
@@ -156,7 +237,7 @@ export default function ExpensesPage() {
     return () => {
       cancelled = true;
     };
-  }, [mode, selectedMonth, selectedYear, householdId]);
+  }, [mode, selectedMonth, selectedYear, householdId, reloadKey]);
 
   const confirmDiscardUnsaved = useCallback((): boolean => {
     if (!hasUnsaved) return true;
@@ -185,6 +266,66 @@ export default function ExpensesPage() {
       setSelectedYear(next);
     },
     [confirmDiscardUnsaved],
+  );
+
+  const handleAddCategoryRequest = useCallback((localId: string) => {
+    setAddCategoryTargetRow(localId);
+  }, []);
+
+  const handleInstallmentsRequest = useCallback((localId: string) => {
+    setInstallmentsTargetRow(localId);
+  }, []);
+
+  const handleInstallmentsConfirm = useCallback(
+    (count: number | null) => {
+      const targetRowId = installmentsTargetRow;
+      if (targetRowId) {
+        setRows((prev) =>
+          prev.map((r) =>
+            r.localId === targetRowId
+              ? {
+                  ...r,
+                  installmentsTotal: count,
+                  status: r.status === 'idle' ? 'dirty' : r.status,
+                }
+              : r,
+          ),
+        );
+      }
+      setInstallmentsTargetRow(null);
+    },
+    [installmentsTargetRow],
+  );
+
+  const handleReloadAfterInstallments = useCallback(() => {
+    setReloadKey((k) => k + 1);
+  }, []);
+
+  const targetInstallmentsRow = useMemo(
+    () => rows.find((r) => r.localId === installmentsTargetRow) ?? null,
+    [rows, installmentsTargetRow],
+  );
+
+  const handleCategoryCreated = useCallback(
+    (category: Category) => {
+      setCategories((prev) => [...prev, category]);
+      const targetRowId = addCategoryTargetRow;
+      if (targetRowId) {
+        setRows((prev) =>
+          prev.map((r) =>
+            r.localId === targetRowId
+              ? {
+                  ...r,
+                  categoryId: category.id,
+                  status: r.status === 'idle' ? 'dirty' : r.status,
+                }
+              : r,
+          ),
+        );
+      }
+      setAddCategoryTargetRow(null);
+    },
+    [addCategoryTargetRow],
   );
 
   const handleHolidayTransactionsCreated = useCallback(
@@ -292,12 +433,37 @@ export default function ExpensesPage() {
           rows={rows}
           categories={expenseCategories}
           householdId={householdId}
+          frequency={
+            mode === 'monthly'
+              ? CategoryFrequency.MONTHLY
+              : CategoryFrequency.YEARLY
+          }
           monthConstraint={monthConstraint}
           yearConstraint={selectedYear}
           onChange={setRows}
           isLoading={isLoading}
+          onAddCategoryRequest={handleAddCategoryRequest}
+          onInstallmentsRequest={handleInstallmentsRequest}
+          onAfterInstallmentsSave={handleReloadAfterInstallments}
         />
       </motion.div>
+
+      <CategoryFormModal
+        isOpen={addCategoryTargetRow !== null}
+        householdId={householdId}
+        type={CategoryType.EXPENSE}
+        existingCategories={expenseCategories}
+        onClose={() => setAddCategoryTargetRow(null)}
+        onCreated={handleCategoryCreated}
+      />
+
+      <InstallmentsModal
+        isOpen={installmentsTargetRow !== null}
+        initialCount={targetInstallmentsRow?.installmentsTotal ?? null}
+        totalAmount={targetInstallmentsRow?.amount ?? '0'}
+        onClose={() => setInstallmentsTargetRow(null)}
+        onConfirm={handleInstallmentsConfirm}
+      />
 
       {mode === 'yearly' && (
         <motion.div variants={ITEM_VARIANTS}>

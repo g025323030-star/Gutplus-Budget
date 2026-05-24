@@ -1,8 +1,9 @@
 import { useEffect, useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
-import { Trash2, X } from 'lucide-react';
+import { CreditCard, Trash2, X } from 'lucide-react';
 import type { Category } from '@gutplus/shared';
 import { ICON_STROKE } from '../../constants/ui';
+import CategoryCombobox from './CategoryCombobox';
 import SaveIndicator from './SaveIndicator';
 import type { DraftRow } from './types';
 
@@ -16,14 +17,14 @@ interface TransactionRowProps {
   onBlurOutside: () => void;
   onRemove: () => void;
   onRetry: () => void;
+  onAddCategoryRequest?: () => void;
+  onInstallmentsRequest?: () => void;
 }
 
 type FieldKey = 'description' | 'categoryId' | 'amount' | 'date';
 
 const INPUT_CLASS =
   'w-full bg-background/60 border border-slate-200 rounded-xl px-4 py-2.5 text-primary placeholder:text-slate-400 focus:outline-none focus:border-accent focus:bg-surface transition-all duration-200';
-
-const SELECT_CLASS = `${INPUT_CLASS} appearance-none cursor-pointer pr-3`;
 
 const padTwo = (n: number): string => String(n).padStart(2, '0');
 
@@ -89,6 +90,8 @@ export default function TransactionRow({
   onBlurOutside,
   onRemove,
   onRetry,
+  onAddCategoryRequest,
+  onInstallmentsRequest,
 }: TransactionRowProps) {
   const rowRef = useRef<HTMLDivElement | null>(null);
   const descriptionRef = useRef<HTMLInputElement | null>(null);
@@ -142,11 +145,6 @@ export default function TransactionRow({
       ? `${INPUT_CLASS} border-red-300 focus:border-red-400`
       : INPUT_CLASS;
 
-  const selectClass = (key: FieldKey): string =>
-    errorFor(key)
-      ? `${SELECT_CLASS} border-red-300 focus:border-red-400`
-      : SELECT_CLASS;
-
   return (
     <motion.div
       ref={rowRef}
@@ -182,22 +180,19 @@ export default function TransactionRow({
 
         <div>
           <label className="label-text mb-1 block md:hidden">קטגוריה</label>
-          <select
-            value={row.categoryId ?? ''}
-            onChange={(e) =>
-              onPatch({ categoryId: e.target.value || null })
+          <CategoryCombobox
+            value={row.categoryId}
+            categories={categories}
+            invalid={Boolean(errorFor('categoryId'))}
+            onChange={(categoryId) => {
+              setTouched((t) => ({ ...t, categoryId: true }));
+              onPatch({ categoryId });
+            }}
+            onBlurOutside={() =>
+              setTouched((t) => ({ ...t, categoryId: true }))
             }
-            onBlur={() => setTouched((t) => ({ ...t, categoryId: true }))}
-            aria-label="קטגוריה"
-            className={selectClass('categoryId')}
-          >
-            <option value="">בחר קטגוריה</option>
-            {categories.map((c) => (
-              <option key={c.id} value={c.id}>
-                {c.name}
-              </option>
-            ))}
-          </select>
+            onAddCategoryRequest={onAddCategoryRequest}
+          />
           {errorFor('categoryId') && (
             <p className="body-text-sm text-red-500 mt-1">
               {errorFor('categoryId')}
@@ -244,6 +239,30 @@ export default function TransactionRow({
         </div>
 
         <div className="flex items-center justify-end gap-2 md:pt-1">
+          {onInstallmentsRequest && row.serverId === null && (
+            <button
+              type="button"
+              onClick={onInstallmentsRequest}
+              aria-label="הגדר תשלומים"
+              title={
+                row.installmentsTotal
+                  ? `${row.installmentsTotal} תשלומים`
+                  : 'הגדר תשלומים'
+              }
+              className={`p-2 rounded-lg transition-colors duration-200 flex items-center gap-1 ${
+                row.installmentsTotal
+                  ? 'text-accent bg-accent/10 hover:bg-accent/20'
+                  : 'text-slate-400 hover:text-accent hover:bg-slate-100'
+              }`}
+            >
+              <CreditCard size={18} strokeWidth={ICON_STROKE} />
+              {row.installmentsTotal ? (
+                <span className="body-text-sm font-semibold">
+                  {row.installmentsTotal}
+                </span>
+              ) : null}
+            </button>
+          )}
           <SaveIndicator
             status={row.status}
             errorMessage={row.errorMessage}

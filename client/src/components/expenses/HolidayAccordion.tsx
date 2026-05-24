@@ -10,7 +10,7 @@ import {
   Sparkles,
   Trash2,
 } from 'lucide-react';
-import { Holiday } from '@gutplus/shared';
+import { CategoryFrequency, Holiday } from '@gutplus/shared';
 import type {
   Category,
   HolidayExpenseTemplate,
@@ -161,6 +161,7 @@ export default function HolidayAccordion({
           amount: it.amount,
           date: targetDate,
           description: it.label.trim(),
+          frequency: CategoryFrequency.YEARLY,
           householdId,
           categoryId,
         }),
