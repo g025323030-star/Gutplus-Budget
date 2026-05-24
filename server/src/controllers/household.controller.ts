@@ -6,7 +6,11 @@ export class HouseholdController {
 
   async create(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
-      const createHouseholdDto: CreateHouseholdDto = req.body;
+      const userId = (req as any).user?.id;
+      const createHouseholdDto: CreateHouseholdDto = {
+        ...req.body,
+        userId: req.body.userId ?? userId,
+      };
       const household = await householdService.create(createHouseholdDto);
       res.status(201).json({
         success: true,

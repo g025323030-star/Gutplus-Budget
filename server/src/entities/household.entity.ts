@@ -23,7 +23,7 @@ export class Household {
   @Column({ name: 'name', type: 'varchar', length: 255 })
   name!: string;
 
-  @Column({ name: 'family_size', type: 'int' })
+  @Column({ name: 'family_size', type: 'int', default: 0 })
   familySize!: number;
 
   @CreateDateColumn({ name: 'created_at', type: 'timestamptz' })

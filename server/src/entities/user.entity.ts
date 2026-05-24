@@ -32,6 +32,9 @@ export class User {
   @Column({ name: 'password', type: 'varchar', length: 255, nullable: true })
   password!: string | null;
 
+  @Column({ name: 'onboarding_completed', type: 'boolean', default: false })
+  onboardingCompleted!: boolean;
+
   @OneToMany(() => Household, household => household.user)
   households!: Household[];
 

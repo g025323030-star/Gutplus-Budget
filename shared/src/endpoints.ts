@@ -18,6 +18,7 @@ export const ENDPOINTS = {
     forgotPassword: 'users/forgot-password',
     me: 'users/me',
     logout: 'users/logout',
+    completeOnboarding: 'users/complete-onboarding',
   },
   tokens: {
     base: 'tokens',

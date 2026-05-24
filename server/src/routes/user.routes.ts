@@ -32,6 +32,11 @@ router.post(
   userController.forgotPassword.bind(userController),
 );
 router.get('/me', authGuard, userController.me.bind(userController));
+router.patch(
+  '/complete-onboarding',
+  authGuard,
+  userController.completeOnboarding.bind(userController),
+);
 router.post('/logout', authGuard, userController.logout.bind(userController));
 
 export default router;

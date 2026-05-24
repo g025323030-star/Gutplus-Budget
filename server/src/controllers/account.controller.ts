@@ -18,7 +18,8 @@ export class AccountController {
 
   async findAll(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
-      const accounts = await accountService.findAll();
+      const householdId = req.query.householdId as string | undefined;
+      const accounts = await accountService.findAll(householdId);
       res.status(200).json({
         success: true,
         data: accounts,

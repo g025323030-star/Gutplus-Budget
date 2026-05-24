@@ -3,8 +3,7 @@ import { uuidSchema } from './common.schemas';
 
 export const createHouseholdSchema = z.object({
   name: z.string().min(1).max(255),
-  email: z.string().email(),
-  familySize: z.number().int().positive(),
+  familySize: z.number().int().nonnegative().optional(),
   userId: uuidSchema.optional(),
 });
 

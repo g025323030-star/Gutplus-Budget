@@ -129,9 +129,36 @@ if(!user){
       const userId = (req as any).user.id;
       const user = await userService.findOne(userId);
       const householdId = user?.households?.[0]?.id ?? null;
+      const onboardingCompleted = user?.onboardingCompleted ?? false;
       res.status(200).json({
         success: true,
-        data: { id: userId, householdId },
+        data: { id: userId, householdId, onboardingCompleted },
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  async completeOnboarding(req: Request, res: Response, next: NextFunction): Promise<void> {
+    try {
+      const userId = (req as any).user.id;
+      const user = await userService.findOne(userId);
+      if (!user) {
+        res.status(404).json({ success: false, message: 'User not found' });
+        return;
+      }
+      const householdId = user.households?.[0]?.id;
+      if (!householdId) {
+        res.status(400).json({
+          success: false,
+          message: 'Cannot complete onboarding without a household',
+        });
+        return;
+      }
+      await userService.update(userId, { onboardingCompleted: true } as any);
+      res.status(200).json({
+        success: true,
+        message: 'Onboarding completed',
       });
     } catch (error) {
       next(error);

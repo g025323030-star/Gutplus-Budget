@@ -31,6 +31,13 @@ export interface ForgotPasswordResponse {
 
 export interface MeResponse {
   id: string;
+  householdId: string | null;
+  onboardingCompleted: boolean;
+}
+
+export interface CompleteOnboardingResponse {
+  success: true;
+  message: string;
 }
 
 export interface LogoutResponse {

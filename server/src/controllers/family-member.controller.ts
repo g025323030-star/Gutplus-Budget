@@ -18,7 +18,8 @@ export class FamilyMemberController {
 
   async findAll(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
-      const familyMembers = await familyMemberService.findAll();
+      const householdId = req.query.householdId as string | undefined;
+      const familyMembers = await familyMemberService.findAll(householdId);
       res.status(200).json({
         success: true,
         data: familyMembers,

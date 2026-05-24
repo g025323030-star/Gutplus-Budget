@@ -1,13 +1,16 @@
 import { Repository } from 'typeorm';
 import { AppDataSource } from '../config/data-source';
 import { FamilyMember } from '../entities/family-member.entity';
+import { Household } from '../entities/household.entity';
 import { CreateFamilyMemberDto, UpdateFamilyMemberDto } from '../dto/family-member.dto';
 
 export class FamilyMemberService {
   private familyMemberRepository: Repository<FamilyMember>;
+  private householdRepository: Repository<Household>;
 
   constructor() {
     this.familyMemberRepository = AppDataSource.getRepository(FamilyMember);
+    this.householdRepository = AppDataSource.getRepository(Household);
   }
 
   async create(createFamilyMemberDto: CreateFamilyMemberDto): Promise<FamilyMember> {
@@ -16,10 +19,18 @@ export class FamilyMemberService {
       role: createFamilyMemberDto.role,
       household: { id: createFamilyMemberDto.householdId } as any,
     });
-    return await this.familyMemberRepository.save(familyMember);
+    const saved = await this.familyMemberRepository.save(familyMember);
+    await this.syncFamilySize(createFamilyMemberDto.householdId);
+    return saved;
   }
 
-  async findAll(): Promise<FamilyMember[]> {
+  async findAll(householdId?: string): Promise<FamilyMember[]> {
+    if (householdId) {
+      return await this.familyMemberRepository.find({
+        where: { household: { id: householdId } },
+        relations: ['household'],
+      });
+    }
     return await this.familyMemberRepository.find({ relations: ['household'] });
   }
 
@@ -36,7 +47,18 @@ export class FamilyMemberService {
   }
 
   async remove(id: string): Promise<void> {
+    const member = await this.findOne(id);
     await this.familyMemberRepository.delete(id);
+    if (member?.household?.id) {
+      await this.syncFamilySize(member.household.id);
+    }
+  }
+
+  private async syncFamilySize(householdId: string): Promise<void> {
+    const count = await this.familyMemberRepository.count({
+      where: { household: { id: householdId } },
+    });
+    await this.householdRepository.update(householdId, { familySize: count });
   }
 }
 

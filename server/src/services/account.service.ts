@@ -24,7 +24,13 @@ export class AccountService {
     return await this.accountRepository.save(account);
   }
 
-  async findAll(): Promise<Account[]> {
+  async findAll(householdId?: string): Promise<Account[]> {
+    if (householdId) {
+      return await this.accountRepository.find({
+        where: { household: { id: householdId } },
+        relations: ['household'],
+      });
+    }
     return await this.accountRepository.find({ relations: ['household'] });
   }
 

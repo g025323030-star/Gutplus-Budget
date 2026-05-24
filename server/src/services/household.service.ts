@@ -13,7 +13,7 @@ export class HouseholdService {
   async create(createHouseholdDto: CreateHouseholdDto): Promise<Household> {
     const household = this.householdRepository.create({
       name: createHouseholdDto.name,
-      familySize: createHouseholdDto.familySize,
+      familySize: createHouseholdDto.familySize ?? 0,
       user: createHouseholdDto.userId ? ({ id: createHouseholdDto.userId } as any) : null,
     });
     return await this.householdRepository.save(household);

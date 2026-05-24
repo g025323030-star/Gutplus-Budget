@@ -14,4 +14,5 @@ export interface UpdateUserDto {
   subscriptionType?: string;
   email?: string;
   password?: string;
+  onboardingCompleted?: boolean;
 }

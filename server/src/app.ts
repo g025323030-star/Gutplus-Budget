@@ -22,7 +22,7 @@ const app = express();
 
 // Middleware
 app.use(cors({
-  origin: 'http://localhost:5174' , // עדכון לכתובת הנכונה של ה-frontend  
+  origin: 'http://localhost:5173' , // עדכון לכתובת הנכונה של ה-frontend  
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization']

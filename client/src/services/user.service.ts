@@ -89,3 +89,15 @@ export const login = async (email: string, password: string): Promise<string> =>
     throw error;
   }
 };
+
+export const completeOnboarding = async (): Promise<string> => {
+  try {
+    await axios.patch(
+      import.meta.env.VITE_SERVER_URL + "users/complete-onboarding",
+    );
+    return 'success';
+  } catch (error) {
+    console.error("Error completing onboarding:", error);
+    throw error;
+  }
+};

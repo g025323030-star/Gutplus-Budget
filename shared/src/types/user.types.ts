@@ -5,6 +5,7 @@ export interface User {
   cycle: string | null;
   subscriptionType: string | null;
   expirationDate: string | null;
+  onboardingCompleted: boolean;
   createdAt: string;
   updatedAt: string;
 }
