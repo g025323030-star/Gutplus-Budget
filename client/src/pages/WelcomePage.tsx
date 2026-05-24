@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { AnimatePresence } from 'framer-motion';
-import type { Account } from '@gutplus/shared';
+import type { Account, FamilyMember } from '@gutplus/shared';
 import { useAuth } from '../context/AuthContext';
 import { listFamilyMembers } from '../services/family-members.service';
 import { listAccounts } from '../services/accounts.service';
@@ -18,6 +18,7 @@ export default function WelcomePage() {
   const { householdId, refreshUserStatus } = useAuth();
   const [currentStep, setCurrentStep] = useState<OnboardingStep | null>(null);
   const [initialAccounts, setInitialAccounts] = useState<Account[]>([]);
+  const [initialMembers, setInitialMembers] = useState<FamilyMember[]>([]);
 
   useEffect(() => {
     let cancelled = false;
@@ -32,6 +33,7 @@ export default function WelcomePage() {
           listAccounts(householdId),
         ]);
         if (cancelled) return;
+        setInitialMembers(members);
         setInitialAccounts(accounts);
         if (members.length === 0) {
           setCurrentStep(2);
@@ -81,7 +83,7 @@ export default function WelcomePage() {
           {currentStep === 2 && (
             <FamilyMembersStep
               key="step-2"
-              initialNameSuggestion=""
+              initialMembers={initialMembers}
               onComplete={() => setCurrentStep(3)}
               onSkip={() => setCurrentStep(3)}
               onBack={() => setCurrentStep(1)}

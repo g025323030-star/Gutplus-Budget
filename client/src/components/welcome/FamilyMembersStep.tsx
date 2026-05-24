@@ -1,12 +1,12 @@
 import { useState } from 'react';
 import { motion } from 'framer-motion';
 import { Users, ArrowLeft, Loader2, Plus, Trash2 } from 'lucide-react';
-import { FamilyMemberRole } from '@gutplus/shared';
+import { FamilyMemberRole, type FamilyMember } from '@gutplus/shared';
 import { createFamilyMember } from '../../services/family-members.service';
 import { useAuth } from '../../context/AuthContext';
 
 interface FamilyMembersStepProps {
-  initialNameSuggestion: string;
+  initialMembers: FamilyMember[];
   onComplete: () => void;
   onSkip: () => void;
   onBack: () => void;
@@ -16,6 +16,7 @@ interface DraftMember {
   localId: string;
   name: string;
   role: FamilyMemberRole;
+  isSaved?: boolean;
 }
 
 const makeId = () => Math.random().toString(36).slice(2, 10);
@@ -23,18 +24,26 @@ const makeId = () => Math.random().toString(36).slice(2, 10);
 const emptyRow = (
   name = '',
   role: FamilyMemberRole = FamilyMemberRole.Parent,
-): DraftMember => ({ localId: makeId(), name, role });
+): DraftMember => ({ localId: makeId(), name, role, isSaved: false });
 
 export default function FamilyMembersStep({
-  initialNameSuggestion,
+  initialMembers,
   onComplete,
   onSkip,
   onBack,
 }: FamilyMembersStepProps) {
   const { householdId } = useAuth();
-  const [rows, setRows] = useState<DraftMember[]>(() => [
-    emptyRow(initialNameSuggestion, FamilyMemberRole.Parent),
-  ]);
+  const [rows, setRows] = useState<DraftMember[]>(() => {
+    if (initialMembers.length > 0) {
+      return initialMembers.map(member => ({
+        localId: member.id,
+        name: member.name,
+        role: member.role,
+        isSaved: true,
+      }));
+    }
+    return [emptyRow('', FamilyMemberRole.Parent)];
+  });
   const [error, setError] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
 
@@ -57,23 +66,29 @@ export default function FamilyMembersStep({
       setError('משק הבית עוד לא נשמר. רעננו את הדף ונסו שוב');
       return;
     }
-    const filled = rows.filter(row => row.name.trim().length > 0);
-    if (filled.length === 0) {
+    const newMembers = rows.filter(row => row.name.trim().length > 0 && !row.isSaved);
+    if (newMembers.length === 0 && rows.some(r => r.isSaved)) {
+      onComplete();
+      return;
+    }
+    if (rows.filter(r => r.name.trim().length > 0).length === 0) {
       onSkip();
       return;
     }
     setError(null);
     setIsSaving(true);
     try {
-      await Promise.all(
-        filled.map(row =>
-          createFamilyMember({
-            name: row.name.trim(),
-            role: row.role,
-            householdId,
-          }),
-        ),
-      );
+      if (newMembers.length > 0) {
+        await Promise.all(
+          newMembers.map(row =>
+            createFamilyMember({
+              name: row.name.trim(),
+              role: row.role,
+              householdId,
+            }),
+          ),
+        );
+      }
       onComplete();
     } catch (err) {
       console.error(err);
