@@ -22,8 +22,8 @@ import { AppDataSource } from './config/data-source';
 const app = express();
 
 const allowedOrigins = process.env.ALLOWED_ORIGINS
-  ? process.env.ALLOWED_ORIGINS.split(',').map(o => o.trim()).filter(Boolean)
-  : ['http://localhost:5173'];
+  // ? process.env.ALLOWED_ORIGINS.split(',').map(o => o.trim()).filter(Boolean)
+  // : ['http://localhost:5173'];
 
 // Middleware
 app.use(cors({
