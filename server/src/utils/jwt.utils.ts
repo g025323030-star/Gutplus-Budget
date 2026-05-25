@@ -26,8 +26,9 @@ export const cookieOptions:Cookie={
     name: 'token',
     options: {
       httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
-      sameSite: 'lax',
+      // secure: process.env.NODE_ENV === 'production',//בפיתוח לא נשתמש ב-secure כדי לאפשר עבודה על localhost, אבל בפרודקשן נגדיר אותו כ-true כדי להבטיח שהעוגייה תישלח רק על חיבור מאובטח (HTTPS)
+      secure: true, // --- IGNORE ---
+      sameSite: 'none',
       maxAge: 3600000
     }
 }
