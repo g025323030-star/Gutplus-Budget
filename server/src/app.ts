@@ -39,6 +39,11 @@ app.listen(PORT, '0.0.0.0', () => {
     console.log(`Server is running on port ${PORT}`);
 });
 
+// הוסף את השורות האלו לפני השורה של app.listen
+app.get('/', (req, res) => {
+    res.send('השרת באוויר ועובד בהצלחה!');
+});
+
 app.use(cookieParser());
 app.use(rollingTokenMiddleware); // הוספת המידלוור לטיפול בטוקן מתגלגל לפני כל שאר המידלוורים
 
