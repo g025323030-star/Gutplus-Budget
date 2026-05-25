@@ -14,6 +14,7 @@ export interface DraftRow extends DraftRowSnapshot {
   status: RowStatus;
   errorMessage: string | null;
   lastSavedSnapshot: DraftRowSnapshot | null;
+  currentInstallment?: number;
 }
 
 export const snapshotOf = (row: DraftRow): DraftRowSnapshot => ({
