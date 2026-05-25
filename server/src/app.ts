@@ -33,6 +33,12 @@ app.use(cors({
   allowedHeaders: ['Content-Type', 'Authorization']
 }));
 
+const PORT: number = process.env.PORT ? Number(process.env.PORT) : 8080;
+
+app.listen(PORT, '0.0.0.0', () => {
+    console.log(`Server is running on port ${PORT}`);
+});
+
 app.use(cookieParser());
 app.use(rollingTokenMiddleware); // הוספת המידלוור לטיפול בטוקן מתגלגל לפני כל שאר המידלוורים
 
