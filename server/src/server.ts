@@ -18,9 +18,18 @@ async function startServer() {
       console.warn('Could not ensure global default categories:', seedError);
     }
 
-    app.listen(PORT, () => {
-      console.log(`Server is running on port ${PORT}`);
-    });
+    // app.listen(PORT, () => {
+    //   console.log(`Server is running on port ${PORT}`);
+    // });
+    app.get('/', (req, res) => {
+    res.send('השרת באוויר ועובד בהצלחה!');
+});
+const PORT: number = process.env.PORT ? Number(process.env.PORT) : 8080;
+
+app.listen(PORT, '0.0.0.0', () => {
+    console.log(`Server is running on port ${PORT}`);
+});
+
   } catch (error) {
     console.error('Error starting server:', error);
     process.exit(1);
