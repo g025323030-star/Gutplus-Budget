@@ -17,12 +17,17 @@ import {
 import { errorHandler } from './middlewares';
 import { rollingTokenMiddleware } from './middlewares/referenceToken';
 import { authGuard } from './middlewares/authGuard';
+import { AppDataSource } from './config/data-source';
 
 const app = express();
 
+const allowedOrigins = process.env.ALLOWED_ORIGINS
+  ? process.env.ALLOWED_ORIGINS.split(',').map(o => o.trim()).filter(Boolean)
+  : ['http://localhost:5173'];
+
 // Middleware
 app.use(cors({
-  origin: 'http://localhost:5173' , // עדכון לכתובת הנכונה של ה-frontend  
+  origin: allowedOrigins,
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization']
@@ -46,8 +51,15 @@ app.use(`${API_PREFIX}/${ENDPOINTS.budgetPlans.base}`, authGuard, budgetPlanRout
 app.use(`${API_PREFIX}/${ENDPOINTS.transactions.base}`, authGuard, transactionRoutes);
 
 // Health check
-app.get('/health', (req, res) => {
-  res.json({ status: 'OK', timestamp: new Date().toISOString() });
+app.get('/health', async (req, res) => {
+  try {
+    if (AppDataSource.isInitialized) {
+      await AppDataSource.query('SELECT 1');
+    }
+    res.status(200).json({ status: 'OK', db: 'up', timestamp: new Date().toISOString() });
+  } catch (error) {
+    res.status(503).json({ status: 'ERROR', db: 'down', timestamp: new Date().toISOString() });
+  }
 });
 
 // Error handling middleware

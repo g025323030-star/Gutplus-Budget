@@ -185,7 +185,7 @@ if(!user){
       }
 
       const token = await tokenController.createResetToken(user.id);
-      const resetLink = `${process.env.FRONTEND_URL || 'http://localhost:5174' || 'http://localhost:5173'}/reset-password?token=${encodeURIComponent(token)}&email=${encodeURIComponent(email)}`;
+      const resetLink = `${process.env.FRONTEND_URL || 'http://localhost:5173'}/reset-password?token=${encodeURIComponent(token)}&email=${encodeURIComponent(email)}`;
       const html = formatResetPasswordEmailTemplate(resetLink);
 
       await sendEmail({

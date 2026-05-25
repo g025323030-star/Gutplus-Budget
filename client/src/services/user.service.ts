@@ -5,7 +5,6 @@ interface EmailCheckResponse {
 }
 
 export const checkEmail = async (email: string): Promise<EmailCheckResponse> => {
-  console.log(import.meta.env.VITE_SERVER_URL);
   try {
     const resEmailChk = await axios.get(
       import.meta.env.VITE_SERVER_URL + "users/check-email",

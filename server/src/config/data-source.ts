@@ -1,4 +1,5 @@
 import 'reflect-metadata';
+import 'dotenv/config';
 import * as path from 'path';
 import { DataSource } from 'typeorm';
 import { Account } from '../entities/account.entity';
@@ -12,29 +13,20 @@ import { User } from '../entities/user.entity';
 
 const isProduction = process.env.NODE_ENV === 'production';
 
-if (isProduction) {
-  const required = [
-    'POSTGRES_HOST',
-    'POSTGRES_PORT',
-    'POSTGRES_USER',
-    'POSTGRES_PASSWORD',
-    'POSTGRES_DB',
-  ];
-  const missing = required.filter(key => !process.env[key]);
-  if (missing.length > 0) {
-    throw new Error(
-      `Missing required environment variables: ${missing.join(', ')}`,
-    );
-  }
+if (isProduction && !process.env.DATABASE_URL) {
+  throw new Error('Missing required environment variable: DATABASE_URL');
 }
+
+const databaseUrl =
+  process.env.DATABASE_URL ||
+  'postgres://gutplus_user:gutplusDP@localhost:5432/gutplus_budget';
+
+const isLocalDb = /(@localhost|@127\.0\.0\.1)/.test(databaseUrl);
 
 export const AppDataSource = new DataSource({
   type: 'postgres',
-  host: process.env.POSTGRES_HOST || 'localhost',
-  port: parseInt(process.env.POSTGRES_PORT || '5432', 10),
-  username: process.env.POSTGRES_USER || 'gutplus_user',
-  password: process.env.POSTGRES_PASSWORD || 'gutplusDP',
-  database: process.env.POSTGRES_DB || 'gutplus_budget',
+  url: databaseUrl,
+  ssl: isLocalDb ? undefined : { rejectUnauthorized: false },
   synchronize: false,
   logging: !isProduction,
   entities: [
