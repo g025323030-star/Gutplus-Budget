@@ -8,6 +8,7 @@ import { Category } from '../entities/category.entity';
 import { FamilyMember } from '../entities/family-member.entity';
 import { Household } from '../entities/household.entity';
 import { PasswordResetToken } from '../entities/token.entity';
+import { RecurringTransaction } from '../entities/recurring-transaction.entity';
 import { Transaction } from '../entities/transaction.entity';
 import { User } from '../entities/user.entity';
 
@@ -36,6 +37,7 @@ export const AppDataSource = new DataSource({
     FamilyMember,
     Household,
     PasswordResetToken,
+    RecurringTransaction,
     Transaction,
     User,
   ],

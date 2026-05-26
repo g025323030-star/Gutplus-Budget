@@ -7,3 +7,4 @@ export * from './categories.schemas';
 export * from './family-members.schemas';
 export * from './budget-plans.schemas';
 export * from './transactions.schemas';
+export * from './recurring-transactions.schemas';

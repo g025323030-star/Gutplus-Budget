@@ -6,5 +6,4 @@ export enum Holiday {
   HANUKKAH = 'HANUKKAH',
   PURIM = 'PURIM',
   SHAVUOT = 'SHAVUOT',
-  YOM_HAATZMAUT = 'YOM_HAATZMAUT',
-}
+  TU_BISHVAT = 'TU_BISHVAT',}

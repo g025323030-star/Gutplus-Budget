@@ -93,7 +93,11 @@ export default function SnapshotPage() {
           getBudgetPlans(queryMonth, queryYear),
         ]);
         if (cancelled) return;
-        setTransactions(tx);
+        const realTx = tx.filter(
+          (item): item is Transaction =>
+            (item as { isProjection?: boolean }).isProjection !== true,
+        );
+        setTransactions(realTx);
         setCategories(cats);
         setBudgetPlans(plans);
       } catch (err) {

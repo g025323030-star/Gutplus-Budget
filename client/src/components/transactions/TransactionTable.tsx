@@ -159,7 +159,9 @@ export default function TransactionTable({
           await updateTransaction(savedId, payload);
         } else {
           const created = await createTransaction(payload);
-          savedId = created.id;
+          if (created.kind === 'transactions' && created.data.length > 0) {
+            savedId = created.data[0].id;
+          }
         }
 
         patchRow(localId, {

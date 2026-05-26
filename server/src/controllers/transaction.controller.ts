@@ -6,12 +6,20 @@ export class TransactionController {
   async create(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
       const createTransactionDto: CreateTransactionDto = req.body;
-      const transaction = await transactionService.create(createTransactionDto);
+      const result = await transactionService.create(createTransactionDto);
       res.status(201).json({
         success: true,
-        data: transaction,
+        data: result,
       });
     } catch (error) {
+      const status = (error as { status?: number }).status;
+      if (status === 404) {
+        res.status(404).json({
+          success: false,
+          message: (error as Error).message,
+        });
+        return;
+      }
       next(error);
     }
   }
@@ -30,7 +38,28 @@ export class TransactionController {
         return;
       }
 
-      const transactions = await transactionService.findAll(household.id);
+      const monthParam = req.query.month;
+      const yearParam = req.query.year;
+      const month =
+        typeof monthParam === 'string' && monthParam.length > 0
+          ? Number(monthParam)
+          : undefined;
+      const year =
+        typeof yearParam === 'string' && yearParam.length > 0
+          ? Number(yearParam)
+          : undefined;
+      const safeMonth =
+        month !== undefined && Number.isFinite(month) && month >= 1 && month <= 12
+          ? month
+          : undefined;
+      const safeYear =
+        year !== undefined && Number.isFinite(year) ? year : undefined;
+
+      const transactions = await transactionService.findAll(
+        household.id,
+        safeMonth,
+        safeYear,
+      );
       res.status(200).json({
         success: true,
         data: transactions,

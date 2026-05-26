@@ -175,7 +175,9 @@ export default function HolidayAccordion({
     results.forEach((res, i) => {
       const localId = targets[i].it.localId;
       if (res.status === 'fulfilled') {
-        succeededTransactions.push(res.value);
+        if (res.value.kind === 'transactions') {
+          succeededTransactions.push(...res.value.data);
+        }
       } else {
         failedLocalIds.add(localId);
         failureMessages.push(extractErrorMessage(res.reason));

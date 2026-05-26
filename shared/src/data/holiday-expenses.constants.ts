@@ -17,6 +17,7 @@ export const HOLIDAY_EXPENSE_TEMPLATES: ReadonlyArray<HolidayExpenseTemplate> = 
       'מוצרי ניקיון לחג',
       'ביגוד חדש',
       'מתנות לילדים',
+      'מתנה לאישה',
       'אירוח ומצרכי בישול',
     ],
   },
@@ -83,16 +84,6 @@ export const HOLIDAY_EXPENSE_TEMPLATES: ReadonlyArray<HolidayExpenseTemplate> = 
       'עוגות וקינוחים',
       'קישוטים ירוקים',
       'אירוח ומצרכי בישול',
-    ],
-  },
-  {
-    holiday: Holiday.YOM_HAATZMAUT,
-    displayName: 'יום העצמאות',
-    defaultItems: [
-      'ציוד מנגל ופחמים',
-      'אוכל ושתיה לחגיגה',
-      'דגלים וקישוטים',
-      'יציאה לאירועים',
     ],
   },
 ];
