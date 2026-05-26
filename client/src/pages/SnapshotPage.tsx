@@ -86,27 +86,38 @@ export default function SnapshotPage() {
       const queryMonth = mode === 'monthly' ? selectedMonth : undefined;
       const queryYear = selectedYear;
 
-      try {
-        const [tx, cats, plans] = await Promise.all([
-          getTransactions(queryMonth, queryYear),
-          getCategories(),
-          getBudgetPlans(queryMonth, queryYear),
-        ]);
-        if (cancelled) return;
-        const realTx = tx.filter(
+      const [txResult, catsResult, plansResult] = await Promise.allSettled([
+        getTransactions(queryMonth, queryYear),
+        getCategories(),
+        getBudgetPlans(queryMonth, queryYear),
+      ]);
+      if (cancelled) return;
+
+      if (catsResult.status === 'fulfilled') {
+        setCategories(catsResult.value);
+      } else {
+        console.error('Error loading categories:', catsResult.reason);
+      }
+
+      if (plansResult.status === 'fulfilled') {
+        setBudgetPlans(plansResult.value);
+      } else {
+        console.error('Error loading budget plans:', plansResult.reason);
+      }
+
+      if (txResult.status === 'fulfilled') {
+        const realTx = txResult.value.filter(
           (item): item is Transaction =>
             (item as { isProjection?: boolean }).isProjection !== true,
         );
         setTransactions(realTx);
-        setCategories(cats);
-        setBudgetPlans(plans);
-      } catch (err) {
-        if (cancelled) return;
-        console.error('Error loading snapshot data:', err);
+      } else {
+        console.error('Error loading transactions:', txResult.reason);
+        setTransactions([]);
         setError('שגיאה בטעינת הנתונים. נסה לרענן את הדף.');
-      } finally {
-        if (!cancelled) setIsLoading(false);
       }
+
+      setIsLoading(false);
     };
 
     fetchAll();

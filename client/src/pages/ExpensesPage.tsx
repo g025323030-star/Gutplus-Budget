@@ -87,21 +87,27 @@ export default function ExpensesPage() {
     const load = async () => {
       setIsLoading(true);
       setError(null);
-      try {
-        const [tx, cats] = await Promise.all([
-          getTransactions(selectedMonth, selectedYear),
-          getCategories(),
-        ]);
-        if (cancelled) return;
-        setTransactions(tx);
-        setCategories(cats);
-      } catch (err) {
-        if (cancelled) return;
-        console.error('Error loading expenses:', err);
-        setError('שגיאה בטעינת ההוצאות. נסה לרענן את הדף.');
-      } finally {
-        if (!cancelled) setIsLoading(false);
+      const [txResult, catsResult] = await Promise.allSettled([
+        getTransactions(selectedMonth, selectedYear),
+        getCategories(),
+      ]);
+      if (cancelled) return;
+
+      if (catsResult.status === 'fulfilled') {
+        setCategories(catsResult.value);
+      } else {
+        console.error('Error loading categories:', catsResult.reason);
       }
+
+      if (txResult.status === 'fulfilled') {
+        setTransactions(txResult.value);
+      } else {
+        console.error('Error loading transactions:', txResult.reason);
+        setTransactions([]);
+        setError('שגיאה בטעינת ההוצאות. נסה לרענן את הדף.');
+      }
+
+      setIsLoading(false);
     };
 
     load();

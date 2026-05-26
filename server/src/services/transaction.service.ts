@@ -357,13 +357,22 @@ export class TransactionService {
       return realItems;
     }
 
-    const recurringRows = await this.recurringRepository
-      .createQueryBuilder('recurring')
-      .leftJoinAndSelect('recurring.household', 'household')
-      .leftJoinAndSelect('recurring.category', 'category')
-      .leftJoinAndSelect('recurring.account', 'account')
-      .where('household.id = :householdId', { householdId })
-      .getMany();
+    let recurringRows: RecurringTransaction[] = [];
+    try {
+      recurringRows = await this.recurringRepository
+        .createQueryBuilder('recurring')
+        .leftJoinAndSelect('recurring.household', 'household')
+        .leftJoinAndSelect('recurring.category', 'category')
+        .leftJoinAndSelect('recurring.account', 'account')
+        .where('household.id = :householdId', { householdId })
+        .getMany();
+    } catch (err) {
+      console.warn(
+        '[transactions.findAll] recurring projection skipped:',
+        err instanceof Error ? err.message : err,
+      );
+      return realItems;
+    }
 
     const projections: RecurringTransactionProjection[] = [];
     for (const recurring of recurringRows) {
