@@ -27,7 +27,7 @@ const HOLIDAY_DEFAULT_MMDD: Record<Holiday, [number, number]> = {
   [Holiday.HANUKKAH]: [12, 15],
   [Holiday.PURIM]: [3, 10],
   [Holiday.SHAVUOT]: [6, 5],
-  [Holiday.YOM_HAATZMAUT]: [5, 1],
+  [Holiday.TU_BISHVAT]: [11, 15],
 };
 
 const padTwo = (n: number): string => String(n).padStart(2, '0');
