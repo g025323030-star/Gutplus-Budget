@@ -180,8 +180,7 @@ export class TransactionService {
     }
 
     const startDate = new Date(dto.date);
-    const endDate =
-      dto.endDate instanceof Date ? dto.endDate : new Date(dto.endDate as string);
+    const endDate = new Date(dto.endDate as string);
     const step = stepMonthsForFrequency(dto.recurringFrequency);
 
     const queryRunner = AppDataSource.createQueryRunner();

@@ -2,6 +2,22 @@ import { z } from 'zod';
 import { CategoryFrequency, TransactionFrequency } from '../enums';
 import { decimalStringSchema, isoDateStringSchema, uuidSchema } from './common.schemas';
 
+const PLAIN_DATE_REGEX = /^\d{4}-\d{2}-\d{2}$/;
+
+const dateInputSchema = z
+  .union([
+    z.string().regex(PLAIN_DATE_REGEX, 'Invalid date'),
+    z.string().datetime({ offset: true }),
+    z.date(),
+  ])
+  .transform((value) => {
+    if (value instanceof Date) return value.toISOString();
+    if (PLAIN_DATE_REGEX.test(value)) {
+      return new Date(`${value}T00:00:00.000Z`).toISOString();
+    }
+    return value;
+  });
+
 export const transactionEntitySchema = z.object({
   id: uuidSchema,
   amount: decimalStringSchema,
@@ -21,7 +37,7 @@ export const transactionEntitySchema = z.object({
 
 const createTransactionBaseSchema = z.object({
   amount: decimalStringSchema,
-  date: isoDateStringSchema,
+  date: dateInputSchema,
   description: z.string().min(1),
   isCleared: z.boolean().optional(),
   frequency: z.nativeEnum(CategoryFrequency),
@@ -31,7 +47,7 @@ const createTransactionBaseSchema = z.object({
   categoryId: uuidSchema.optional(),
   accountId: uuidSchema.optional(),
   isRecurring: z.boolean().optional(),
-  endDate: z.union([isoDateStringSchema, z.date()]).optional(),
+  endDate: dateInputSchema.optional(),
   recurringFrequency: z.nativeEnum(TransactionFrequency).optional(),
 });
 
@@ -100,10 +116,7 @@ export const createTransactionSchema = createTransactionBaseSchema.superRefine(
     }
 
     if (value.endDate !== undefined) {
-      const endMs =
-        value.endDate instanceof Date
-          ? value.endDate.getTime()
-          : Date.parse(value.endDate);
+      const endMs = Date.parse(value.endDate);
       const startMs = Date.parse(value.date);
       if (!Number.isNaN(endMs) && !Number.isNaN(startMs) && endMs < startMs) {
         ctx.addIssue({
