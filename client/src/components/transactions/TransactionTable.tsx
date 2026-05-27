@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef } from 'react';
 import axios from 'axios';
 import { AnimatePresence, motion } from 'framer-motion';
-import { AlertTriangle, Plus, Receipt } from 'lucide-react';
+import { AlertTriangle, Plus } from 'lucide-react';
 import type { Category, CategoryFrequency } from '@gutplus/shared';
 import { ICON_STROKE } from '../../constants/ui';
 import {
@@ -44,6 +44,8 @@ interface TransactionTableProps {
   yearConstraint: number;
   onChange: (rows: DraftRow[]) => void;
   isLoading?: boolean;
+  focusedRowId?: string | null;
+  onRowFocus?: (localId: string) => void;
   onAddCategoryRequest?: (localId: string) => void;
   onInstallmentsRequest?: (localId: string) => void;
   onAfterInstallmentsSave?: () => void;
@@ -58,6 +60,8 @@ export default function TransactionTable({
   yearConstraint,
   onChange,
   isLoading = false,
+  focusedRowId = null,
+  onRowFocus,
   onAddCategoryRequest,
   onInstallmentsRequest,
   onAfterInstallmentsSave,
@@ -259,7 +263,8 @@ export default function TransactionTable({
     const next = [...rowsRef.current, newRow];
     rowsRef.current = next;
     onChange(next);
-  }, [monthConstraint, yearConstraint, onChange]);
+    onRowFocus?.(localId);
+  }, [monthConstraint, yearConstraint, onChange, onRowFocus]);
 
   const errorCount = useMemo(
     () => rows.filter((r) => r.status === 'error').length,
@@ -270,14 +275,12 @@ export default function TransactionTable({
   const noCategories = categories.length === 0;
 
   return (
-    <div className="bg-surface rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
-      <div className="flex items-center justify-between gap-3 px-6 py-4 border-b border-slate-100">
+    <div className="bg-surface rounded-2xl shadow-sm border border-slate-100 p-6 flex flex-col h-full">
+      <div className="flex items-center justify-between gap-3 mb-6">
         <div className="flex items-center gap-2">
-          <Receipt
-            className="text-accent"
-            size={20}
-            strokeWidth={ICON_STROKE}
-          />
+          <span className="text-xl" aria-hidden>
+            💰
+          </span>
           <h2 className="heading-3">רשימת הוצאות</h2>
         </div>
         <motion.button
@@ -285,9 +288,9 @@ export default function TransactionTable({
           onClick={handleAddRow}
           whileHover={{ scale: 1.02 }}
           whileTap={{ scale: 0.98 }}
-          className="bg-accent text-white px-4 py-2 rounded-xl label-text shadow-sm hover:shadow-md hover:bg-accent/90 transition-all duration-200 flex items-center gap-2"
+          className="bg-accent text-white px-4 py-2 rounded-xl label-text shadow-sm hover:shadow-md hover:bg-accent/90 transition-all duration-200 flex items-center gap-1.5"
         >
-          <Plus size={18} strokeWidth={ICON_STROKE} />
+          <Plus size={16} strokeWidth={ICON_STROKE} />
           הוסף שורה
         </motion.button>
       </div>
@@ -299,7 +302,7 @@ export default function TransactionTable({
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -8 }}
             transition={{ duration: 0.2 }}
-            className="bg-red-50 border-b border-red-100 px-6 py-3 flex items-center gap-2"
+            className="bg-red-50 border border-red-100 rounded-xl px-4 py-3 mb-4 flex items-center gap-2"
           >
             <AlertTriangle
               className="text-red-500"
@@ -314,15 +317,17 @@ export default function TransactionTable({
         )}
       </AnimatePresence>
 
-      <div className="hidden md:grid md:grid-cols-[2fr_1.5fr_1fr_1fr_auto] md:gap-4 px-6 py-3 bg-background/40 border-b border-slate-100">
-        <span className="label-text">תיאור</span>
-        <span className="label-text">קטגוריה</span>
-        <span className="label-text">סכום (₪)</span>
-        <span className="label-text">תאריך</span>
-        <span className="label-text text-end">פעולה</span>
+      <div className="hidden md:grid md:grid-cols-[2fr_1.5fr_1fr_1fr_auto] md:gap-4 px-4 mb-2">
+        <span className="label-text text-slate-400 text-xs">תיאור</span>
+        <span className="label-text text-slate-400 text-xs">קטגוריה</span>
+        <span className="label-text text-slate-400 text-xs">סכום (₪)</span>
+        <span className="label-text text-slate-400 text-xs">תאריך</span>
+        <span className="label-text text-slate-400 text-xs text-center">
+          פעולה
+        </span>
       </div>
 
-      <div className="px-4 md:px-6 py-4 space-y-3 md:space-y-0">
+      <div className="space-y-3 overflow-y-auto max-h-[600px] pr-1 flex-1">
         {noCategories && !isLoading && (
           <div className="py-10 text-center">
             <p className="body-text text-slate-500">
@@ -360,6 +365,10 @@ export default function TransactionTable({
               monthConstraint={monthConstraint}
               yearConstraint={yearConstraint}
               autoFocus={newRowFocus.current === row.localId}
+              focused={focusedRowId === row.localId}
+              onFocus={
+                onRowFocus ? () => onRowFocus(row.localId) : undefined
+              }
               onPatch={(patch) => {
                 if (newRowFocus.current === row.localId) {
                   newRowFocus.current = null;
