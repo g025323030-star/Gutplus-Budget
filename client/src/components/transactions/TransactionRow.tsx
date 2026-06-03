@@ -13,6 +13,8 @@ interface TransactionRowProps {
   monthConstraint?: number;
   yearConstraint: number;
   autoFocus?: boolean;
+  focused?: boolean;
+  onFocus?: () => void;
   onPatch: (patch: Partial<DraftRow>) => void;
   onBlurOutside: () => void;
   onRemove: () => void;
@@ -86,6 +88,8 @@ export default function TransactionRow({
   monthConstraint,
   yearConstraint,
   autoFocus = false,
+  focused = false,
+  onFocus,
   onPatch,
   onBlurOutside,
   onRemove,
@@ -125,6 +129,19 @@ export default function TransactionRow({
     onBlurOutside();
   };
 
+  const handleRowFocus = (e: React.FocusEvent<HTMLDivElement>) => {
+    if (!onFocus) return;
+    const previous = e.relatedTarget as Node | null;
+    if (rowRef.current && previous && rowRef.current.contains(previous)) {
+      return;
+    }
+    onFocus();
+  };
+
+  const handleRowMouseDown = () => {
+    onFocus?.();
+  };
+
   const handleDeleteClick = () => {
     if (row.serverId === null) {
       onRemove();
@@ -149,12 +166,18 @@ export default function TransactionRow({
     <motion.div
       ref={rowRef}
       onBlur={handleRowBlur}
+      onFocus={handleRowFocus}
+      onMouseDown={handleRowMouseDown}
       layout
       initial={{ opacity: 0, y: 6 }}
       animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0, y: -6 }}
       transition={{ duration: 0.25, ease: 'easeOut' }}
-      className="bg-surface rounded-2xl border border-slate-100 p-4 md:p-3 md:bg-transparent md:border-0 md:border-b md:border-slate-100 md:rounded-none md:hover:bg-slate-50/60 transition-colors duration-200"
+      className={`p-2 md:p-3 rounded-2xl border-2 transition-all duration-200 cursor-pointer ${
+        focused
+          ? 'bg-slate-50/80 border-accent/30 shadow-sm'
+          : 'border-transparent hover:bg-slate-50/50'
+      }`}
     >
       <div className="grid grid-cols-1 gap-3 md:grid-cols-[2fr_1.5fr_1fr_1fr_auto] md:gap-4 md:items-start">
         <div>
