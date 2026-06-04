@@ -5,7 +5,7 @@ import { CategoryFrequency, CategoryType } from '@gutplus/shared';
 import type { Category, TransactionListItem } from '@gutplus/shared';
 import { ICON_STROKE } from '../constants/ui';
 import { useCurrentUser } from '../hooks/useCurrentUser';
-import { getTransactions } from '../services/transactions.service';
+import { getTransactions, createTransaction } from '../services/transactions.service';
 import { getCategories } from '../services/categories.service';
 import TransactionTable from '../components/transactions/TransactionTable';
 import InstallmentsModal from '../components/transactions/InstallmentsModal';
@@ -13,6 +13,7 @@ import CategoryFormModal from '../components/transactions/CategoryFormModal';
 import CategoryHelperPanel from '../components/expenses/CategoryHelperPanel';
 import type { DraftRow } from '../components/transactions/types';
 import { snapshotOf } from '../components/transactions/types';
+import { SuggestedRowsModal } from '../components/expenses/SuggestedRowsModal';
 
 const HEBREW_MONTHS = [
   'ינואר',
@@ -22,7 +23,7 @@ const HEBREW_MONTHS = [
   'מאי',
   'יוני',
   'יולי',
-  'אוגוסט',
+  'אפריל',
   'ספטמבר',
   'אוקטובר',
   'נובמבר',
@@ -87,7 +88,7 @@ export default function ExpensesPage() {
   );
   const [selectedYear, setSelectedYear] = useState<number>(now.getFullYear());
   const [activeTab, setActiveTab] = useState<'monthly' | 'yearly'>('monthly');
-
+  const [selectedMainCategoryId, setSelectedMainCategoryId] = useState<string | null>(null);
   const [rows, setRows] = useState<DraftRow[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
   const [isLoading, setIsLoading] = useState<boolean>(true);
@@ -101,6 +102,9 @@ export default function ExpensesPage() {
   const [addCategoryForRowId, setAddCategoryForRowId] = useState<
     string | null
   >(null);
+  const [isSuggestionModalOpen, setIsSuggestionModalOpen] = useState(false);
+  const [suggestedRows, setSuggestedRows] = useState<DraftRow[]>([]);
+  const [isSavingTemplates, setIsSavingTemplates] = useState(false);
 
   const {
     householdId,
@@ -173,6 +177,12 @@ export default function ExpensesPage() {
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedMonth, selectedYear, householdId, reloadKey]);
+
+  useEffect(() => {
+    if (mainExpenseCategories && mainExpenseCategories.length > 0 && !selectedMainCategoryId) {
+      setSelectedMainCategoryId(mainExpenseCategories[0].id);
+    }
+  }, [mainExpenseCategories, selectedMainCategoryId]);
 
   const handleRowsChange = useCallback((next: DraftRow[]) => {
     setRows(next);
@@ -251,25 +261,26 @@ export default function ExpensesPage() {
     [expenseCategories],
   );
 
-  const handleFillCategoryTemplates = useCallback(
-    (mainId: string) => {
-      const subs = globalExpenseSubcategories.filter(
-        (c) => c.parentCategoryId === mainId,
-      );
-      const newRows = buildTemplateRows(subs);
-      if (newRows.length === 0) return;
-      setRows((prev) => [...prev, ...newRows]);
-      setFocusedRowId(newRows[0].localId);
-    },
-    [globalExpenseSubcategories, buildTemplateRows],
-  );
+  const handleFillSelectedCategoryTemplates = useCallback(() => {
+    if (!selectedMainCategoryId) {
+      alert("אנא בחרו קטגוריה ראשית מתוך 'עוזר הקטגוריות המהיר' בצד.");
+      return;
+    }
 
-  const handleFillAllTemplates = useCallback(() => {
-    const newRows = buildTemplateRows(globalExpenseSubcategories);
-    if (newRows.length === 0) return;
-    setRows((prev) => [...prev, ...newRows]);
-    setFocusedRowId(newRows[0].localId);
-  }, [globalExpenseSubcategories, buildTemplateRows]);
+    const subs = globalExpenseSubcategories.filter(
+      (c) => c.parentCategoryId === selectedMainCategoryId,
+    );
+
+    const newRows = buildTemplateRows(subs);
+    
+    if (newRows.length === 0) {
+      alert("כל תתי-הקטגוריות עבור הקטגוריה שנבחרה כבר קיימות בטבלה לחודש זה.");
+      return;
+    }
+
+    setSuggestedRows(newRows);
+    setIsSuggestionModalOpen(true);
+  }, [selectedMainCategoryId, globalExpenseSubcategories, buildTemplateRows]);
 
   const handleInstallmentsRequest = useCallback((localId: string) => {
     setInstallmentsForRowId(localId);
@@ -324,6 +335,72 @@ export default function ExpensesPage() {
     },
     [addCategoryForRowId],
   );
+
+  // פונקציית השמירה האסינכרונית המתוקנת ללא שגיאות טיפוסים
+  const handleSaveSuggestedRows = useCallback(async (rowsFromModal: DraftRow[]) => {
+    const validRows = rowsFromModal.filter(row => row.amount && Number(row.amount) > 0);
+    
+    if (validRows.length === 0) {
+      setIsSuggestionModalOpen(false);
+      setSuggestedRows([]);
+      return;
+    }
+
+    if (!householdId) return;
+
+    setIsSavingTemplates(true);
+    const savedRowsToAppend: DraftRow[] = [];
+
+    try {
+      for (const row of validRows) {
+        const payload = {
+          amount: String(row.amount),
+          date: row.date,
+          description: row.description.trim(),
+          frequency: CategoryFrequency.MONTHLY,
+          householdId: householdId,
+          categoryId: row.categoryId ?? undefined,
+          installmentsTotal: row.installmentsTotal ?? undefined,
+        };
+
+        const result = await createTransaction(payload);
+
+        if (result && result.kind === 'transactions' && result.data?.[0]) {
+          const serverData = result.data[0];
+          
+          const savedRow: DraftRow = {
+            ...row,
+            serverId: serverData.id,
+            status: 'synced',
+            lastSavedSnapshot: null,
+          };
+          savedRow.lastSavedSnapshot = snapshotOf(savedRow);
+          
+          savedRowsToAppend.push(savedRow);
+        } else {
+          savedRowsToAppend.push({
+            ...row,
+            status: 'error',
+            errorMessage: 'השמירה בשרת נכשלה',
+          });
+        }
+      }
+
+      setRows((prev) => [...prev, ...savedRowsToAppend]);
+      setIsSuggestionModalOpen(false);
+      setSuggestedRows([]);
+    } catch (err) {
+      console.error('Failed to save template rows:', err);
+      alert('התרחשה שגיאה בעת שמירת הנתונים.');
+    } finally {
+      setIsSavingTemplates(false);
+    }
+  }, [householdId]);
+
+  const handleCloseSuggestionModal = useCallback(() => {
+    setIsSuggestionModalOpen(false);
+    setSuggestedRows([]);
+  }, []);
 
   const installmentsRow = useMemo(
     () => rows.find((r) => r.localId === installmentsForRowId) ?? null,
@@ -392,8 +469,7 @@ export default function ExpensesPage() {
           <div>
             <h1 className="heading-2">הוצאות</h1>
             <p className="body-text-sm text-slate-500 leading-relaxed mt-1">
-              הזן הוצאות חודשיות ושנתיות. בתצוגה השנתית ניתן גם להוסיף הוצאות
-              לפי חגים.
+              הזן הוצאות חודשיות ושנתיות. בתצוגה השנתית ניתן גם להוסיף הוצאות לפי חגים.
             </p>
           </div>
         </div>
@@ -507,8 +583,8 @@ export default function ExpensesPage() {
             onAddCategoryRequest={handleAddCategoryRequest}
             onInstallmentsRequest={handleInstallmentsRequest}
             onAfterInstallmentsSave={handleAfterInstallmentsSave}
-            onFillTemplates={handleFillAllTemplates}
-            showTemplatesButton={!isFirstUse}
+            onFillTemplates={handleFillSelectedCategoryTemplates}
+            showTemplatesButton={true}
           />
         </div>
 
@@ -521,10 +597,19 @@ export default function ExpensesPage() {
             focusedRowIndex={focusedRowIndex === -1 ? null : focusedRowIndex}
             onPickSubcategory={handlePickSubcategory}
             isFirstUse={isFirstUse}
-            onFillCategoryTemplates={handleFillCategoryTemplates}
+            selectedMainId={selectedMainCategoryId}
+            onSelectedMainIdChange={setSelectedMainCategoryId}
           />
         </div>
       </motion.div>
+
+      <SuggestedRowsModal 
+        isOpen={isSuggestionModalOpen}
+        rows={suggestedRows}
+        isLoading={isSavingTemplates}
+        onClose={handleCloseSuggestionModal}
+        onConfirm={handleSaveSuggestedRows}
+      />
 
       <InstallmentsModal
         isOpen={installmentsForRowId !== null}

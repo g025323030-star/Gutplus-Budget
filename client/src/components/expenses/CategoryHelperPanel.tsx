@@ -1,4 +1,4 @@
-import { useMemo, useState, useEffect } from 'react';
+import { useMemo } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { Info, Sparkles } from 'lucide-react';
 import type { Category } from '@gutplus/shared';
@@ -13,7 +13,9 @@ interface CategoryHelperPanelProps {
   focusedRowIndex: number | null;
   onPickSubcategory: (categoryId: string) => void;
   isFirstUse?: boolean;
-  onFillCategoryTemplates?: (mainId: string) => void;
+  // onFillCategoryTemplates?: (mainId: string) => void;
+  selectedMainId: string | null;
+  onSelectedMainIdChange: (id: string | null) => void;
 }
 
 export default function CategoryHelperPanel({
@@ -24,28 +26,21 @@ export default function CategoryHelperPanel({
   focusedRowIndex,
   onPickSubcategory,
   isFirstUse = false,
-  onFillCategoryTemplates,
+  // onFillCategoryTemplates,
+  selectedMainId,
+  onSelectedMainIdChange,
 }: CategoryHelperPanelProps) {
-  const [selectedMainId, setSelectedMainId] = useState<string | null>(
-    mainCategories[0]?.id ?? null,
-  );
-
-  useEffect(() => {
-    if (mainCategories.length === 0) {
-      setSelectedMainId(null);
-      return;
-    }
-    if (!selectedMainId || !mainCategories.find((c) => c.id === selectedMainId)) {
-      setSelectedMainId(mainCategories[0].id);
-    }
-  }, [mainCategories, selectedMainId]);
 
   const subcategories = useMemo(() => {
-    if (!selectedMainId) return [] as Category[];
+    if (!selectedMainId) return [];
     return allCategories.filter((c) => c.parentCategoryId === selectedMainId);
   }, [allCategories, selectedMainId]);
 
   const disabled = focusedRowId === null;
+  
+const handleCategoryClick = (catId: string) => {
+  onSelectedMainIdChange(catId);
+};
 
   return (
     <aside
@@ -95,10 +90,7 @@ export default function CategoryHelperPanel({
             <button
               key={cat.id}
               type="button"
-              onClick={() => {
-                setSelectedMainId(cat.id);
-                if (isFirstUse) onFillCategoryTemplates?.(cat.id);
-              }}
+              onClick={() => handleCategoryClick(cat.id)}
               aria-pressed={isSelected}
               aria-label={
                 isFirstUse
@@ -146,26 +138,35 @@ export default function CategoryHelperPanel({
                 אין תתי קטגוריות זמינות
               </motion.p>
             ) : (
-              subcategories.map((sub, idx) => (
-                <motion.button
-                  key={`${selectedMainId}-${sub.id}`}
-                  type="button"
-                  initial={{ opacity: 0, y: 5 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0, y: -5 }}
-                  transition={{ duration: 0.2, delay: idx * 0.03 }}
-                  onClick={() => onPickSubcategory(sub.id)}
-                  disabled={disabled}
-                  aria-label={`בחר תת-קטגוריה ${sub.name}`}
-                  className={`px-3 py-2 rounded-xl body-text-sm font-semibold border transition-all duration-200 ${
-                    disabled
-                      ? 'bg-slate-50 text-slate-300 border-slate-100 cursor-not-allowed'
-                      : 'bg-surface hover:bg-accent hover:text-white border-slate-200 text-slate-600 hover:border-transparent active:scale-95 shadow-sm'
-                  }`}
-                >
-                  {sub.name}
-                </motion.button>
-              ))
+              /* התיקון: איחוד מערך הכפתורים תחת אלמנט אב יחיד עבור AnimatePresence */
+              <motion.div
+                key={`list-${selectedMainId}`}
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                className="flex flex-wrap gap-2 w-full"
+              >
+                {subcategories.map((sub, idx) => (
+                  <motion.button
+                    key={`${selectedMainId}-${sub.id}`}
+                    type="button"
+                    initial={{ opacity: 0, y: 5 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: -5 }}
+                    transition={{ duration: 0.2, delay: idx * 0.03 }}
+                    onClick={() => onPickSubcategory(sub.id)}
+                    disabled={disabled}
+                    aria-label={`בחר תת-קטגוריה ${sub.name}`}
+                    className={`px-3 py-2 rounded-xl body-text-sm font-semibold border transition-all duration-200 ${
+                      disabled
+                        ? 'bg-slate-50 text-slate-300 border-slate-100 cursor-not-allowed'
+                        : 'bg-surface hover:bg-accent hover:text-white border-slate-200 text-slate-600 hover:border-transparent active:scale-95 shadow-sm'
+                    }`}
+                  >
+                    {sub.name}
+                  </motion.button>
+                ))}
+              </motion.div>
             )}
           </AnimatePresence>
         </div>
@@ -178,8 +179,7 @@ export default function CategoryHelperPanel({
           className="text-accent shrink-0 mt-0.5"
         />
         <p className="text-[11px] text-slate-500 leading-normal">
-          לחיצה על תת-קטגוריה מזינה אותה לשורה הנבחרת ועוברת אוטומטית לשורה הבאה
-          להזנה מהירה.
+          לחיצה על תת-קטגוריה מזינה אותה לשורה הנבחרת ועוברת אוטומטית לשורה הבאה להזנה מהירה.
         </p>
       </div>
     </aside>
