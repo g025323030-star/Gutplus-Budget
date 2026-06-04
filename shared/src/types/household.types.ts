@@ -3,6 +3,7 @@ export interface Household {
   name: string;
   familySize: number;
   userId: string | null;
+  expenseTemplatesInitialized: boolean;
   createdAt: string;
   updatedAt: string;
 }

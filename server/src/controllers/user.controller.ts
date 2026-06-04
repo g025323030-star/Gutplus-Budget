@@ -128,11 +128,19 @@ if(!user){
     try {
       const userId = (req as any).user.id;
       const user = await userService.findOne(userId);
-      const householdId = user?.households?.[0]?.id ?? null;
+      const household = user?.households?.[0] ?? null;
+      const householdId = household?.id ?? null;
       const onboardingCompleted = user?.onboardingCompleted ?? false;
+      const expenseTemplatesInitialized =
+        household?.expenseTemplatesInitialized ?? false;
       res.status(200).json({
         success: true,
-        data: { id: userId, householdId, onboardingCompleted },
+        data: {
+          id: userId,
+          householdId,
+          onboardingCompleted,
+          expenseTemplatesInitialized,
+        },
       });
     } catch (error) {
       next(error);

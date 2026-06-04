@@ -5,6 +5,7 @@ import { ENDPOINTS } from '@gutplus/shared';
 interface CurrentUserState {
   userId: string | null;
   householdId: string | null;
+  expenseTemplatesInitialized: boolean;
   isLoading: boolean;
   error: string | null;
 }
@@ -12,7 +13,11 @@ interface CurrentUserState {
 const apiUrl = (path: string): string =>
   import.meta.env.VITE_SERVER_URL + path;
 
-let cache: { userId: string; householdId: string } | null = null;
+let cache: {
+  userId: string;
+  householdId: string;
+  expenseTemplatesInitialized: boolean;
+} | null = null;
 
 export function useCurrentUser(): CurrentUserState {
   const [state, setState] = useState<CurrentUserState>(() =>
@@ -20,12 +25,14 @@ export function useCurrentUser(): CurrentUserState {
       ? {
           userId: cache.userId,
           householdId: cache.householdId,
+          expenseTemplatesInitialized: cache.expenseTemplatesInitialized,
           isLoading: false,
           error: null,
         }
       : {
           userId: null,
           householdId: null,
+          expenseTemplatesInitialized: false,
           isLoading: true,
           error: null,
         },
@@ -42,6 +49,9 @@ export function useCurrentUser(): CurrentUserState {
         const payload = res.data?.data ?? res.data ?? {};
         const userId: string | undefined = payload.id;
         const householdId: string | null = payload.householdId ?? null;
+        const expenseTemplatesInitialized = Boolean(
+          payload.expenseTemplatesInitialized,
+        );
 
         if (cancelled) return;
 
@@ -49,6 +59,7 @@ export function useCurrentUser(): CurrentUserState {
           setState({
             userId: null,
             householdId: null,
+            expenseTemplatesInitialized: false,
             isLoading: false,
             error: 'לא ניתן לזהות את המשתמש',
           });
@@ -56,12 +67,13 @@ export function useCurrentUser(): CurrentUserState {
         }
 
         if (householdId) {
-          cache = { userId, householdId };
+          cache = { userId, householdId, expenseTemplatesInitialized };
         }
 
         setState({
           userId,
           householdId,
+          expenseTemplatesInitialized,
           isLoading: false,
           error: householdId ? null : 'לא נמצא משק בית עבור המשתמש',
         });
@@ -71,6 +83,7 @@ export function useCurrentUser(): CurrentUserState {
         setState({
           userId: null,
           householdId: null,
+          expenseTemplatesInitialized: false,
           isLoading: false,
           error: 'שגיאה בטעינת פרטי המשתמש',
         });

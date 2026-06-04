@@ -12,6 +12,8 @@ interface CategoryHelperPanelProps {
   focusedRowDescription: string;
   focusedRowIndex: number | null;
   onPickSubcategory: (categoryId: string) => void;
+  isFirstUse?: boolean;
+  onFillCategoryTemplates?: (mainId: string) => void;
 }
 
 export default function CategoryHelperPanel({
@@ -21,6 +23,8 @@ export default function CategoryHelperPanel({
   focusedRowDescription,
   focusedRowIndex,
   onPickSubcategory,
+  isFirstUse = false,
+  onFillCategoryTemplates,
 }: CategoryHelperPanelProps) {
   const [selectedMainId, setSelectedMainId] = useState<string | null>(
     mainCategories[0]?.id ?? null,
@@ -58,11 +62,13 @@ export default function CategoryHelperPanel({
           עוזר קטגוריות מהיר
         </h3>
         <p className="body-text-sm text-slate-400 mt-1">
-          בחר שורה מהטבלה, ולחץ על קטגוריה ותת-קטגוריה כדי להזין במהירות.
+          {isFirstUse
+            ? 'לחצו על קטגוריה כדי למלא שורות פתיחה לרישום מהיר'
+            : 'בחר שורה מהטבלה, ולחץ על קטגוריה ותת-קטגוריה כדי להזין במהירות.'}
         </p>
       </div>
 
-      {focusedRowId !== null ? (
+      {isFirstUse ? null : focusedRowId !== null ? (
         <div className="bg-accent/5 border border-accent/20 rounded-xl p-3 mb-6 flex items-center justify-between gap-2">
           <div className="flex items-center gap-2 min-w-0">
             <span className="w-2.5 h-2.5 rounded-full bg-accent animate-pulse shrink-0" />
@@ -89,8 +95,16 @@ export default function CategoryHelperPanel({
             <button
               key={cat.id}
               type="button"
-              onClick={() => setSelectedMainId(cat.id)}
+              onClick={() => {
+                setSelectedMainId(cat.id);
+                if (isFirstUse) onFillCategoryTemplates?.(cat.id);
+              }}
               aria-pressed={isSelected}
+              aria-label={
+                isFirstUse
+                  ? `מלא שורות פתיחה עבור ${cat.name}`
+                  : undefined
+              }
               className={`p-3 rounded-xl border text-right flex flex-col justify-between h-20 transition-all duration-200 ${
                 isSelected
                   ? 'bg-primary border-transparent text-white shadow-md'

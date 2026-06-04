@@ -100,10 +100,24 @@ const toRecurringShared = (
 export class TransactionService {
   private transactionRepository: Repository<Transaction>;
   private recurringRepository: Repository<RecurringTransaction>;
+  private householdRepository: Repository<Household>;
 
   constructor() {
     this.transactionRepository = AppDataSource.getRepository(Transaction);
     this.recurringRepository = AppDataSource.getRepository(RecurringTransaction);
+    this.householdRepository = AppDataSource.getRepository(Household);
+  }
+
+  /**
+   * Idempotently marks a household's expense templates as initialized after its
+   * first transaction is created. A single conditional UPDATE keeps this cheap:
+   * it only writes when the flag is still false.
+   */
+  private async markExpenseTemplatesInitialized(householdId: string): Promise<void> {
+    await this.householdRepository.update(
+      { id: householdId, expenseTemplatesInitialized: false },
+      { expenseTemplatesInitialized: true },
+    );
   }
 
   async create(
@@ -124,20 +138,24 @@ export class TransactionService {
 
     if (isPermanentRecurring) {
       const created = await this.createPermanentRecurring(dto);
+      await this.markExpenseTemplatesInitialized(dto.householdId);
       return { kind: 'recurring', data: created };
     }
 
     if (isBoundedRecurring) {
       const created = await this.createBoundedRecurring(dto);
+      await this.markExpenseTemplatesInitialized(dto.householdId);
       return { kind: 'transactions', data: created };
     }
 
     if (hasInstallments) {
       const created = await this.createInstallments(dto);
+      await this.markExpenseTemplatesInitialized(dto.householdId);
       return { kind: 'transactions', data: created };
     }
 
     const created = await this.createSingleTransaction(dto);
+    await this.markExpenseTemplatesInitialized(dto.householdId);
     return { kind: 'transactions', data: [created] };
   }
 

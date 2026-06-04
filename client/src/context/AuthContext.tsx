@@ -8,6 +8,7 @@ interface AuthContextType {
   userId: string | null;
   householdId: string | null;
   onboardingCompleted: boolean;
+  expenseTemplatesInitialized: boolean;
   checkAuth: () => Promise<boolean>;
   refreshUserStatus: () => Promise<void>;
   logout: () => Promise<void>;
@@ -24,6 +25,8 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   const [userId, setUserId] = useState<string | null>(null);
   const [householdId, setHouseholdId] = useState<string | null>(null);
   const [onboardingCompleted, setOnboardingCompleted] = useState(false);
+  const [expenseTemplatesInitialized, setExpenseTemplatesInitialized] =
+    useState(false);
 
   const checkAuth = async (): Promise<boolean> => {
     setIsLoading(true);
@@ -33,12 +36,16 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       setUserId(payload.id ?? null);
       setHouseholdId(payload.householdId ?? null);
       setOnboardingCompleted(Boolean(payload.onboardingCompleted));
+      setExpenseTemplatesInitialized(
+        Boolean(payload.expenseTemplatesInitialized),
+      );
       setIsAuthenticated(true);
       return true;
     } catch {
       setUserId(null);
       setHouseholdId(null);
       setOnboardingCompleted(false);
+      setExpenseTemplatesInitialized(false);
       setIsAuthenticated(false);
       return false;
     } finally {
@@ -57,6 +64,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       setUserId(null);
       setHouseholdId(null);
       setOnboardingCompleted(false);
+      setExpenseTemplatesInitialized(false);
       setIsAuthenticated(false);
     }
   };
@@ -69,6 +77,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         userId,
         householdId,
         onboardingCompleted,
+        expenseTemplatesInitialized,
         checkAuth,
         refreshUserStatus,
         logout,

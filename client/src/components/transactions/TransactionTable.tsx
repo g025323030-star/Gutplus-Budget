@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef } from 'react';
 import axios from 'axios';
 import { AnimatePresence, motion } from 'framer-motion';
-import { AlertTriangle, Plus } from 'lucide-react';
+import { AlertTriangle, ListPlus, Plus } from 'lucide-react';
 import type { Category, CategoryFrequency } from '@gutplus/shared';
 import { ICON_STROKE } from '../../constants/ui';
 import {
@@ -49,6 +49,8 @@ interface TransactionTableProps {
   onAddCategoryRequest?: (localId: string) => void;
   onInstallmentsRequest?: (localId: string) => void;
   onAfterInstallmentsSave?: () => void;
+  onFillTemplates?: () => void;
+  showTemplatesButton?: boolean;
 }
 
 export default function TransactionTable({
@@ -65,6 +67,8 @@ export default function TransactionTable({
   onAddCategoryRequest,
   onInstallmentsRequest,
   onAfterInstallmentsSave,
+  onFillTemplates,
+  showTemplatesButton = false,
 }: TransactionTableProps) {
   const rowsRef = useRef<DraftRow[]>(rows);
   const pendingResave = useRef<Record<string, boolean>>({});
@@ -283,16 +287,31 @@ export default function TransactionTable({
           </span>
           <h2 className="heading-3">רשימת הוצאות</h2>
         </div>
-        <motion.button
-          type="button"
-          onClick={handleAddRow}
-          whileHover={{ scale: 1.02 }}
-          whileTap={{ scale: 0.98 }}
-          className="bg-accent text-white px-4 py-2 rounded-xl label-text shadow-sm hover:shadow-md hover:bg-accent/90 transition-all duration-200 flex items-center gap-1.5"
-        >
-          <Plus size={16} strokeWidth={ICON_STROKE} />
-          הוסף שורה
-        </motion.button>
+        <div className="flex items-center gap-2">
+          {showTemplatesButton && onFillTemplates && (
+            <motion.button
+              type="button"
+              onClick={onFillTemplates}
+              whileHover={{ scale: 1.05 }}
+              whileTap={{ scale: 0.95 }}
+              aria-label="הוסף שורות מתבנית"
+              title="הוסף שורות מתבנית"
+              className="w-10 h-10 bg-surface border border-slate-200 text-primary rounded-xl shadow-sm hover:shadow-md hover:bg-slate-50 transition-all duration-200 flex items-center justify-center"
+            >
+              <ListPlus size={18} strokeWidth={ICON_STROKE} />
+            </motion.button>
+          )}
+          <motion.button
+            type="button"
+            onClick={handleAddRow}
+            whileHover={{ scale: 1.02 }}
+            whileTap={{ scale: 0.98 }}
+            className="bg-accent text-white px-4 py-2 rounded-xl label-text shadow-sm hover:shadow-md hover:bg-accent/90 transition-all duration-200 flex items-center gap-1.5"
+          >
+            <Plus size={16} strokeWidth={ICON_STROKE} />
+            הוסף שורה
+          </motion.button>
+        </div>
       </div>
 
       <AnimatePresence>

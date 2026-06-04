@@ -26,6 +26,9 @@ export class Household {
   @Column({ name: 'family_size', type: 'int', default: 0 })
   familySize!: number;
 
+  @Column({ name: 'expense_templates_initialized', type: 'boolean', default: false })
+  expenseTemplatesInitialized!: boolean;
+
   @CreateDateColumn({ name: 'created_at', type: 'timestamptz' })
   createdAt!: Date;
 

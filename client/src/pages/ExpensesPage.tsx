@@ -51,6 +51,9 @@ const newLocalId = (): string =>
     ? crypto.randomUUID()
     : `tmp-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
 
+const normDesc = (s: string): string =>
+  s.trim().replace(/\s+/g, ' ').toLowerCase();
+
 const isProjectionItem = (
   item: TransactionListItem,
 ): item is Extract<TransactionListItem, { isProjection: true }> =>
@@ -101,9 +104,12 @@ export default function ExpensesPage() {
 
   const {
     householdId,
+    expenseTemplatesInitialized,
     isLoading: userLoading,
     error: userError,
   } = useCurrentUser();
+
+  const isFirstUse = !expenseTemplatesInitialized;
 
   const expenseCategories = useMemo(
     () => categories.filter((c) => c.type === CategoryType.EXPENSE),
@@ -209,6 +215,61 @@ export default function ExpensesPage() {
     },
     [focusedRowId, rows],
   );
+
+  const buildTemplateRows = useCallback(
+    (subcategories: Category[]): DraftRow[] => {
+      const used = new Set(rows.map((r) => normDesc(r.description)));
+      const date = `${selectedYear}-${String(selectedMonth).padStart(2, '0')}-01`;
+      const newRows: DraftRow[] = [];
+      for (const sub of subcategories) {
+        const key = normDesc(sub.name);
+        if (used.has(key)) continue;
+        used.add(key);
+        newRows.push({
+          localId: newLocalId(),
+          serverId: null,
+          installmentsTotal: null,
+          description: sub.name.trim(),
+          categoryId: sub.id,
+          amount: '',
+          date,
+          status: 'idle',
+          errorMessage: null,
+          lastSavedSnapshot: null,
+        });
+      }
+      return newRows;
+    },
+    [rows, selectedMonth, selectedYear],
+  );
+
+  const globalExpenseSubcategories = useMemo(
+    () =>
+      expenseCategories.filter(
+        (c) => c.parentCategoryId !== null && c.householdId === null,
+      ),
+    [expenseCategories],
+  );
+
+  const handleFillCategoryTemplates = useCallback(
+    (mainId: string) => {
+      const subs = globalExpenseSubcategories.filter(
+        (c) => c.parentCategoryId === mainId,
+      );
+      const newRows = buildTemplateRows(subs);
+      if (newRows.length === 0) return;
+      setRows((prev) => [...prev, ...newRows]);
+      setFocusedRowId(newRows[0].localId);
+    },
+    [globalExpenseSubcategories, buildTemplateRows],
+  );
+
+  const handleFillAllTemplates = useCallback(() => {
+    const newRows = buildTemplateRows(globalExpenseSubcategories);
+    if (newRows.length === 0) return;
+    setRows((prev) => [...prev, ...newRows]);
+    setFocusedRowId(newRows[0].localId);
+  }, [globalExpenseSubcategories, buildTemplateRows]);
 
   const handleInstallmentsRequest = useCallback((localId: string) => {
     setInstallmentsForRowId(localId);
@@ -446,6 +507,8 @@ export default function ExpensesPage() {
             onAddCategoryRequest={handleAddCategoryRequest}
             onInstallmentsRequest={handleInstallmentsRequest}
             onAfterInstallmentsSave={handleAfterInstallmentsSave}
+            onFillTemplates={handleFillAllTemplates}
+            showTemplatesButton={!isFirstUse}
           />
         </div>
 
@@ -457,6 +520,8 @@ export default function ExpensesPage() {
             focusedRowDescription={focusedRow?.description ?? ''}
             focusedRowIndex={focusedRowIndex === -1 ? null : focusedRowIndex}
             onPickSubcategory={handlePickSubcategory}
+            isFirstUse={isFirstUse}
+            onFillCategoryTemplates={handleFillCategoryTemplates}
           />
         </div>
       </motion.div>

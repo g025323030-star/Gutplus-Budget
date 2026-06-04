@@ -33,6 +33,7 @@ export interface MeResponse {
   id: string;
   householdId: string | null;
   onboardingCompleted: boolean;
+  expenseTemplatesInitialized: boolean;
 }
 
 export interface CompleteOnboardingResponse {
