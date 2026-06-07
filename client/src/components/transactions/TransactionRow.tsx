@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
-import { CreditCard, Trash2, X } from 'lucide-react';
+import { CreditCard, Repeat, Trash2, X } from 'lucide-react';
 import type { Category } from '@gutplus/shared';
 import { ICON_STROKE } from '../../constants/ui';
 import CategoryCombobox from './CategoryCombobox';
@@ -21,6 +21,7 @@ interface TransactionRowProps {
   onRetry: () => void;
   onAddCategoryRequest?: () => void;
   onInstallmentsRequest?: () => void;
+  onRecurringRequest?: () => void;
 }
 
 type FieldKey = 'description' | 'categoryId' | 'amount' | 'date';
@@ -96,6 +97,7 @@ export default function TransactionRow({
   onRetry,
   onAddCategoryRequest,
   onInstallmentsRequest,
+  onRecurringRequest,
 }: TransactionRowProps) {
   const rowRef = useRef<HTMLDivElement | null>(null);
   const descriptionRef = useRef<HTMLInputElement | null>(null);
@@ -262,7 +264,7 @@ export default function TransactionRow({
         </div>
 
         <div className="flex items-center justify-end gap-2 md:pt-1">
-          {onInstallmentsRequest && row.serverId === null && (
+          {onInstallmentsRequest && row.serverId === null && !row.isRecurring && (
             <button
               type="button"
               onClick={onInstallmentsRequest}
@@ -286,6 +288,27 @@ export default function TransactionRow({
               ) : null}
             </button>
           )}
+          {onRecurringRequest &&
+            row.serverId === null &&
+            row.installmentsTotal === null && (
+              <button
+                type="button"
+                onClick={onRecurringRequest}
+                aria-label="הגדר עסקה קבועה"
+                title={
+                  row.isRecurring
+                    ? 'עסקה קבועה פעילה'
+                    : 'הגדר עסקה קבועה (חוזרת)'
+                }
+                className={`p-2 rounded-lg transition-colors duration-200 flex items-center ${
+                  row.isRecurring
+                    ? 'text-accent bg-accent/10 hover:bg-accent/20'
+                    : 'text-slate-400 hover:text-accent hover:bg-slate-100'
+                }`}
+              >
+                <Repeat size={18} strokeWidth={ICON_STROKE} />
+              </button>
+            )}
           <SaveIndicator
             status={row.status}
             errorMessage={row.errorMessage}

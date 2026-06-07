@@ -1,3 +1,4 @@
+import type { TransactionFrequency } from '@gutplus/shared';
 import type { RowStatus } from './SaveIndicator';
 
 export interface DraftRowSnapshot {
@@ -11,6 +12,9 @@ export interface DraftRow extends DraftRowSnapshot {
   localId: string;
   serverId: string | null;
   installmentsTotal: number | null;
+  isRecurring: boolean;
+  recurringFrequency: TransactionFrequency | null;
+  recurringEndDate: string | null;
   status: RowStatus;
   errorMessage: string | null;
   lastSavedSnapshot: DraftRowSnapshot | null;

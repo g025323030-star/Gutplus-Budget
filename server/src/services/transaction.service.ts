@@ -162,8 +162,8 @@ export class TransactionService {
   private async createPermanentRecurring(
     dto: CreateTransactionDto,
   ): Promise<RecurringTransactionShared> {
-    if (!dto.categoryId || !dto.accountId) {
-      throw new Error('categoryId and accountId are required for recurring transactions');
+    if (!dto.categoryId) {
+      throw new Error('categoryId is required for recurring transactions');
     }
     if (!dto.recurringFrequency) {
       throw new Error('recurringFrequency is required for recurring transactions');
@@ -184,7 +184,7 @@ export class TransactionService {
       startDate,
       household: { id: dto.householdId } as any,
       category: { id: dto.categoryId } as any,
-      account: { id: dto.accountId } as any,
+      account: dto.accountId ? ({ id: dto.accountId } as any) : null,
     });
     const saved = await this.recurringRepository.save(recurring);
     return toRecurringShared(saved);

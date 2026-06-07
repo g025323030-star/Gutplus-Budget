@@ -48,7 +48,9 @@ interface TransactionTableProps {
   onRowFocus?: (localId: string) => void;
   onAddCategoryRequest?: (localId: string) => void;
   onInstallmentsRequest?: (localId: string) => void;
+  onRecurringRequest?: (localId: string) => void;
   onAfterInstallmentsSave?: () => void;
+  onAfterRecurringSave?: () => void;
   onFillTemplates?: () => void;
   showTemplatesButton?: boolean;
 }
@@ -66,7 +68,9 @@ export default function TransactionTable({
   onRowFocus,
   onAddCategoryRequest,
   onInstallmentsRequest,
+  onRecurringRequest,
   onAfterInstallmentsSave,
+  onAfterRecurringSave,
   onFillTemplates,
   showTemplatesButton = false,
 }: TransactionTableProps) {
@@ -147,8 +151,15 @@ export default function TransactionTable({
 
       try {
         let savedId = current.serverId;
+        // Installments and recurring are create-only and mutually exclusive
+        // (enforced by createTransactionSchema on the server).
+        const isRecurring =
+          !savedId &&
+          current.isRecurring &&
+          current.recurringFrequency !== null;
         const isInstallments =
           !savedId &&
+          !isRecurring &&
           current.installmentsTotal !== null &&
           current.installmentsTotal >= 2;
         const payload = {
@@ -159,7 +170,22 @@ export default function TransactionTable({
           householdId,
           categoryId: current.categoryId ?? undefined,
           ...(isInstallments
-            ? { installmentsTotal: current.installmentsTotal! }
+            ? {
+                installmentsTotal: current.installmentsTotal!,
+                // The entered date is the first installment; the server
+                // generates the remaining installments forward from it.
+                // Required alongside installmentsTotal by createTransactionSchema.
+                installmentIndex: 1,
+              }
+            : {}),
+          ...(isRecurring
+            ? {
+                isRecurring: true,
+                recurringFrequency: current.recurringFrequency!,
+                ...(current.recurringEndDate
+                  ? { endDate: current.recurringEndDate }
+                  : {}),
+              }
             : {}),
         };
 
@@ -183,6 +209,11 @@ export default function TransactionTable({
         if (isInstallments) {
           onAfterInstallmentsSave?.();
         }
+        if (isRecurring) {
+          // A permanent recurring rule has no single transaction id; reload so
+          // its generated occurrences/projections show up correctly.
+          onAfterRecurringSave?.();
+        }
 
         if (pendingResave.current[localId]) {
           pendingResave.current[localId] = false;
@@ -203,6 +234,7 @@ export default function TransactionTable({
       patchRow,
       scheduleSyncedFade,
       onAfterInstallmentsSave,
+      onAfterRecurringSave,
     ],
   );
 
@@ -255,6 +287,9 @@ export default function TransactionTable({
       localId,
       serverId: null,
       installmentsTotal: null,
+      isRecurring: false,
+      recurringFrequency: null,
+      recurringEndDate: null,
       description: '',
       categoryId: null,
       amount: '',
@@ -405,6 +440,11 @@ export default function TransactionTable({
               onInstallmentsRequest={
                 onInstallmentsRequest
                   ? () => onInstallmentsRequest(row.localId)
+                  : undefined
+              }
+              onRecurringRequest={
+                onRecurringRequest
+                  ? () => onRecurringRequest(row.localId)
                   : undefined
               }
             />
