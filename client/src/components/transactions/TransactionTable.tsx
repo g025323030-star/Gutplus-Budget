@@ -3,6 +3,7 @@ import axios from 'axios';
 import { AnimatePresence, motion } from 'framer-motion';
 import { AlertTriangle, ListPlus, Plus } from 'lucide-react';
 import type { Category, CategoryFrequency } from '@gutplus/shared';
+import { TransactionFrequency } from '@gutplus/shared';
 import { ICON_STROKE } from '../../constants/ui';
 import {
   createTransaction,
@@ -47,10 +48,8 @@ interface TransactionTableProps {
   focusedRowId?: string | null;
   onRowFocus?: (localId: string) => void;
   onAddCategoryRequest?: (localId: string) => void;
-  onInstallmentsRequest?: (localId: string) => void;
-  onRecurringRequest?: (localId: string) => void;
-  onAfterInstallmentsSave?: () => void;
-  onAfterRecurringSave?: () => void;
+  onAdvancedModeRequest?: (localId: string) => void;
+  onAfterAdvancedModeSave?: () => void;
   onFillTemplates?: () => void;
   showTemplatesButton?: boolean;
 }
@@ -67,10 +66,8 @@ export default function TransactionTable({
   focusedRowId = null,
   onRowFocus,
   onAddCategoryRequest,
-  onInstallmentsRequest,
-  onRecurringRequest,
-  onAfterInstallmentsSave,
-  onAfterRecurringSave,
+  onAdvancedModeRequest,
+  onAfterAdvancedModeSave,
   onFillTemplates,
   showTemplatesButton = false,
 }: TransactionTableProps) {
@@ -153,44 +150,37 @@ export default function TransactionTable({
         let savedId = current.serverId;
         // Installments and recurring are create-only and mutually exclusive
         // (enforced by createTransactionSchema on the server).
-        const isRecurring =
+        const isUnsavedInstallments =
           !savedId &&
-          current.isRecurring &&
-          current.recurringFrequency !== null;
-        const isInstallments =
-          !savedId &&
-          !isRecurring &&
+          current.mode === 'installments' &&
           current.installmentsTotal !== null &&
           current.installmentsTotal >= 2;
-        const payload = {
+        const isUnsavedRecurring = !savedId && current.mode === 'recurring';
+
+        const base = {
           amount: current.amount,
           date: current.date,
           description: current.description.trim(),
           frequency,
           householdId,
           categoryId: current.categoryId ?? undefined,
-          ...(isInstallments
-            ? {
-                installmentsTotal: current.installmentsTotal!,
-                // The entered date is the first installment; the server
-                // generates the remaining installments forward from it.
-                // Required alongside installmentsTotal by createTransactionSchema.
-                installmentIndex: 1,
-              }
-            : {}),
-          ...(isRecurring
-            ? {
-                isRecurring: true,
-                recurringFrequency: current.recurringFrequency!,
-                ...(current.recurringEndDate
-                  ? { endDate: current.recurringEndDate }
-                  : {}),
-              }
-            : {}),
         };
 
+        const payload = isUnsavedInstallments
+          ? { ...base, installmentsTotal: current.installmentsTotal! }
+          : isUnsavedRecurring
+            ? {
+                ...base,
+                isRecurring: true as const,
+                recurringFrequency: current.isBiMonthly
+                  ? TransactionFrequency.BI_MONTHLY
+                  : TransactionFrequency.MONTHLY,
+                ...(current.endDate ? { endDate: current.endDate } : {}),
+              }
+            : base;
+
         if (savedId) {
-          await updateTransaction(savedId, payload);
+          await updateTransaction(savedId, base);
         } else {
           const created = await createTransaction(payload);
           if (created.kind === 'transactions' && created.data.length > 0) {
@@ -206,13 +196,11 @@ export default function TransactionTable({
         });
         scheduleSyncedFade(localId);
 
-        if (isInstallments) {
-          onAfterInstallmentsSave?.();
-        }
-        if (isRecurring) {
-          // A permanent recurring rule has no single transaction id; reload so
-          // its generated occurrences/projections show up correctly.
-          onAfterRecurringSave?.();
+        if (isUnsavedInstallments || isUnsavedRecurring) {
+          // Installments expand into multiple rows, and a permanent recurring
+          // rule has no single transaction id — reload so the generated
+          // occurrences/projections show up correctly.
+          onAfterAdvancedModeSave?.();
         }
 
         if (pendingResave.current[localId]) {
@@ -233,8 +221,7 @@ export default function TransactionTable({
       yearConstraint,
       patchRow,
       scheduleSyncedFade,
-      onAfterInstallmentsSave,
-      onAfterRecurringSave,
+      onAfterAdvancedModeSave,
     ],
   );
 
@@ -287,9 +274,6 @@ export default function TransactionTable({
       localId,
       serverId: null,
       installmentsTotal: null,
-      isRecurring: false,
-      recurringFrequency: null,
-      recurringEndDate: null,
       description: '',
       categoryId: null,
       amount: '',
@@ -297,6 +281,9 @@ export default function TransactionTable({
       status: 'idle',
       errorMessage: null,
       lastSavedSnapshot: null,
+      mode: 'none',
+      endDate: null,
+      isBiMonthly: false,
     };
     newRowFocus.current = localId;
     const next = [...rowsRef.current, newRow];
@@ -437,14 +424,9 @@ export default function TransactionTable({
                   ? () => onAddCategoryRequest(row.localId)
                   : undefined
               }
-              onInstallmentsRequest={
-                onInstallmentsRequest
-                  ? () => onInstallmentsRequest(row.localId)
-                  : undefined
-              }
-              onRecurringRequest={
-                onRecurringRequest
-                  ? () => onRecurringRequest(row.localId)
+              onAdvancedModeRequest={
+                onAdvancedModeRequest
+                  ? () => onAdvancedModeRequest(row.localId)
                   : undefined
               }
             />

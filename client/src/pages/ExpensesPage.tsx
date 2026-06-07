@@ -8,9 +8,8 @@ import { useCurrentUser } from '../hooks/useCurrentUser';
 import { getTransactions, createTransaction } from '../services/transactions.service';
 import { getCategories } from '../services/categories.service';
 import TransactionTable from '../components/transactions/TransactionTable';
-import InstallmentsModal from '../components/transactions/InstallmentsModal';
-import RecurringModal from '../components/transactions/RecurringModal';
-import type { RecurringValue } from '../components/transactions/RecurringModal';
+import AdvancedModeModal from '../components/transactions/AdvancedModeModal';
+import type { AdvancedModeResult } from '../components/transactions/AdvancedModeModal';
 import CategoryFormModal from '../components/transactions/CategoryFormModal';
 import CategoryHelperPanel from '../components/expenses/CategoryHelperPanel';
 import type { DraftRow } from '../components/transactions/types';
@@ -67,13 +66,11 @@ const toDraftRow = (item: TransactionListItem): DraftRow | null => {
   const amountStr =
     typeof item.amount === 'string' ? item.amount : String(item.amount);
   const dateOnly = item.date ? item.date.slice(0, 10) : '';
+  const installmentsTotal = item.installmentsTotal ?? null;
   const base: DraftRow = {
     localId: newLocalId(),
     serverId: item.id,
-    installmentsTotal: item.installmentsTotal ?? null,
-    isRecurring: false,
-    recurringFrequency: null,
-    recurringEndDate: null,
+    installmentsTotal,
     description: item.description,
     categoryId: item.categoryId ?? null,
     amount: amountStr,
@@ -81,6 +78,9 @@ const toDraftRow = (item: TransactionListItem): DraftRow | null => {
     status: 'idle',
     errorMessage: null,
     lastSavedSnapshot: null,
+    mode: installmentsTotal !== null ? 'installments' : 'none',
+    endDate: null,
+    isBiMonthly: false,
   };
   base.lastSavedSnapshot = snapshotOf(base);
   return base;
@@ -101,12 +101,9 @@ export default function ExpensesPage() {
   const [reloadKey, setReloadKey] = useState(0);
 
   const [focusedRowId, setFocusedRowId] = useState<string | null>(null);
-  const [installmentsForRowId, setInstallmentsForRowId] = useState<
+  const [advancedModeForRowId, setAdvancedModeForRowId] = useState<
     string | null
   >(null);
-  const [recurringForRowId, setRecurringForRowId] = useState<string | null>(
-    null,
-  );
   const [addCategoryForRowId, setAddCategoryForRowId] = useState<
     string | null
   >(null);
@@ -200,7 +197,7 @@ export default function ExpensesPage() {
     setFocusedRowId(localId);
   }, []);
 
-  const handleAfterInstallmentsSave = useCallback(() => {
+  const handleAfterAdvancedModeSave = useCallback(() => {
     setReloadKey((k) => k + 1);
   }, []);
 
@@ -247,9 +244,6 @@ export default function ExpensesPage() {
           localId: newLocalId(),
           serverId: null,
           installmentsTotal: null,
-          isRecurring: false,
-          recurringFrequency: null,
-          recurringEndDate: null,
           description: sub.name.trim(),
           categoryId: sub.id,
           amount: '',
@@ -257,6 +251,9 @@ export default function ExpensesPage() {
           status: 'idle',
           errorMessage: null,
           lastSavedSnapshot: null,
+          mode: 'none',
+          endDate: null,
+          isBiMonthly: false,
         });
       }
       return newRows;
@@ -293,73 +290,52 @@ export default function ExpensesPage() {
     setIsSuggestionModalOpen(true);
   }, [selectedMainCategoryId, globalExpenseSubcategories, buildTemplateRows]);
 
-  const handleInstallmentsRequest = useCallback((localId: string) => {
-    setInstallmentsForRowId(localId);
+  const handleAdvancedModeRequest = useCallback((localId: string) => {
+    setAdvancedModeForRowId(localId);
   }, []);
 
-  const handleInstallmentsConfirm = useCallback(
-    (count: number | null) => {
-      if (!installmentsForRowId) return;
+  const handleAdvancedModeConfirm = useCallback(
+    (result: AdvancedModeResult) => {
+      if (!advancedModeForRowId) return;
       setRows((prev) =>
-        prev.map((r) =>
-          r.localId === installmentsForRowId
-            ? {
-                ...r,
-                installmentsTotal: count,
-                // Installments and recurring are mutually exclusive.
-                ...(count !== null
-                  ? {
-                      isRecurring: false,
-                      recurringFrequency: null,
-                      recurringEndDate: null,
-                    }
-                  : {}),
-                status:
-                  r.status === 'idle' || r.status === 'synced'
-                    ? 'dirty'
-                    : r.status,
-              }
-            : r,
-        ),
+        prev.map((r) => {
+          if (r.localId !== advancedModeForRowId) return r;
+          const status =
+            r.status === 'idle' || r.status === 'synced' ? 'dirty' : r.status;
+          if (result.mode === 'installments') {
+            return {
+              ...r,
+              mode: 'installments',
+              installmentsTotal: result.installmentsTotal,
+              endDate: null,
+              isBiMonthly: false,
+              status,
+            };
+          }
+          if (result.mode === 'recurring') {
+            return {
+              ...r,
+              mode: 'recurring',
+              installmentsTotal: null,
+              endDate: result.endDate,
+              isBiMonthly: result.isBiMonthly,
+              status,
+            };
+          }
+          return {
+            ...r,
+            mode: 'none',
+            installmentsTotal: null,
+            endDate: null,
+            isBiMonthly: false,
+            status,
+          };
+        }),
       );
-      setInstallmentsForRowId(null);
+      setAdvancedModeForRowId(null);
     },
-    [installmentsForRowId],
+    [advancedModeForRowId],
   );
-
-  const handleRecurringRequest = useCallback((localId: string) => {
-    setRecurringForRowId(localId);
-  }, []);
-
-  const handleRecurringConfirm = useCallback(
-    (value: RecurringValue | null) => {
-      if (!recurringForRowId) return;
-      setRows((prev) =>
-        prev.map((r) =>
-          r.localId === recurringForRowId
-            ? {
-                ...r,
-                isRecurring: value !== null,
-                recurringFrequency: value?.recurringFrequency ?? null,
-                recurringEndDate: value?.recurringEndDate ?? null,
-                // Installments and recurring are mutually exclusive.
-                ...(value !== null ? { installmentsTotal: null } : {}),
-                status:
-                  r.status === 'idle' || r.status === 'synced'
-                    ? 'dirty'
-                    : r.status,
-              }
-            : r,
-        ),
-      );
-      setRecurringForRowId(null);
-    },
-    [recurringForRowId],
-  );
-
-  const handleAfterRecurringSave = useCallback(() => {
-    setReloadKey((k) => k + 1);
-  }, []);
 
   const handleAddCategoryRequest = useCallback((localId: string) => {
     setAddCategoryForRowId(localId);
@@ -455,25 +431,9 @@ export default function ExpensesPage() {
     setSuggestedRows([]);
   }, []);
 
-  const installmentsRow = useMemo(
-    () => rows.find((r) => r.localId === installmentsForRowId) ?? null,
-    [installmentsForRowId, rows],
-  );
-
-  const recurringRow = useMemo(
-    () => rows.find((r) => r.localId === recurringForRowId) ?? null,
-    [recurringForRowId, rows],
-  );
-
-  const recurringInitialValue = useMemo<RecurringValue | null>(
-    () =>
-      recurringRow && recurringRow.isRecurring && recurringRow.recurringFrequency
-        ? {
-            recurringFrequency: recurringRow.recurringFrequency,
-            recurringEndDate: recurringRow.recurringEndDate,
-          }
-        : null,
-    [recurringRow],
+  const advancedModeRow = useMemo(
+    () => rows.find((r) => r.localId === advancedModeForRowId) ?? null,
+    [advancedModeForRowId, rows],
   );
 
   const focusedRow = useMemo(
@@ -650,10 +610,8 @@ export default function ExpensesPage() {
             focusedRowId={focusedRowId}
             onRowFocus={handleRowFocus}
             onAddCategoryRequest={handleAddCategoryRequest}
-            onInstallmentsRequest={handleInstallmentsRequest}
-            onRecurringRequest={handleRecurringRequest}
-            onAfterInstallmentsSave={handleAfterInstallmentsSave}
-            onAfterRecurringSave={handleAfterRecurringSave}
+            onAdvancedModeRequest={handleAdvancedModeRequest}
+            onAfterAdvancedModeSave={handleAfterAdvancedModeSave}
             onFillTemplates={handleFillSelectedCategoryTemplates}
             showTemplatesButton={true}
           />
@@ -682,20 +640,15 @@ export default function ExpensesPage() {
         onConfirm={handleSaveSuggestedRows}
       />
 
-      <InstallmentsModal
-        isOpen={installmentsForRowId !== null}
-        initialCount={installmentsRow?.installmentsTotal ?? null}
-        totalAmount={installmentsRow?.amount ?? ''}
-        onClose={() => setInstallmentsForRowId(null)}
-        onConfirm={handleInstallmentsConfirm}
-      />
-
-      <RecurringModal
-        isOpen={recurringForRowId !== null}
-        initialValue={recurringInitialValue}
-        startDate={recurringRow?.date ?? ''}
-        onClose={() => setRecurringForRowId(null)}
-        onConfirm={handleRecurringConfirm}
+      <AdvancedModeModal
+        isOpen={advancedModeForRowId !== null}
+        initialMode={advancedModeRow?.mode ?? 'none'}
+        initialInstallmentsTotal={advancedModeRow?.installmentsTotal ?? null}
+        initialEndDate={advancedModeRow?.endDate ?? null}
+        initialIsBiMonthly={advancedModeRow?.isBiMonthly ?? false}
+        totalAmount={advancedModeRow?.amount ?? ''}
+        onClose={() => setAdvancedModeForRowId(null)}
+        onConfirm={handleAdvancedModeConfirm}
       />
 
       <CategoryFormModal
