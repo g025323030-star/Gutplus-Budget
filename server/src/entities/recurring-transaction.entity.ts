@@ -60,10 +60,10 @@ export class RecurringTransaction {
 
   @ManyToOne(() => Account, {
     onDelete: 'CASCADE',
-    nullable: false,
+    nullable: true,
   })
   @JoinColumn({ name: 'account_id' })
-  account!: Account;
+  account!: Account | null;
 
   @CreateDateColumn({ name: 'created_at', type: 'timestamptz' })
   createdAt!: Date;

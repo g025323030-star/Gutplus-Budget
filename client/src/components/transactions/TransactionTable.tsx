@@ -148,6 +148,8 @@ export default function TransactionTable({
 
       try {
         let savedId = current.serverId;
+        // Installments and recurring are create-only and mutually exclusive
+        // (enforced by createTransactionSchema on the server).
         const isUnsavedInstallments =
           !savedId &&
           current.mode === 'installments' &&
@@ -195,6 +197,9 @@ export default function TransactionTable({
         scheduleSyncedFade(localId);
 
         if (isUnsavedInstallments || isUnsavedRecurring) {
+          // Installments expand into multiple rows, and a permanent recurring
+          // rule has no single transaction id — reload so the generated
+          // occurrences/projections show up correctly.
           onAfterAdvancedModeSave?.();
         }
 
