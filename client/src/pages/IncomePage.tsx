@@ -1,18 +1,443 @@
-import { TrendingUp } from 'lucide-react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { motion } from 'framer-motion';
+import { AlertCircle, Calendar, ChevronDown, TrendingUp } from 'lucide-react';
+import { CategoryFrequency, CategoryType } from '@gutplus/shared';
+import type { Category, TransactionListItem } from '@gutplus/shared';
+import { ICON_STROKE } from '../constants/ui';
+import { useCurrentUser } from '../hooks/useCurrentUser';
+import { getTransactions } from '../services/transactions.service';
+import { getCategories } from '../services/categories.service';
+import TransactionTable from '../components/transactions/TransactionTable';
+import AdvancedModeModal from '../components/transactions/AdvancedModeModal';
+import type { AdvancedModeResult } from '../components/transactions/AdvancedModeModal';
+import CategoryFormModal from '../components/transactions/CategoryFormModal';
+import type { DraftRow } from '../components/transactions/types';
+import { snapshotOf } from '../components/transactions/types';
+
+const HEBREW_MONTHS = [
+  'ינואר',
+  'פברואר',
+  'מרץ',
+  'אפריל',
+  'מאי',
+  'יוני',
+  'יולי',
+  'אוגוסט',
+  'ספטמבר',
+  'אוקטובר',
+  'נובמבר',
+  'דצמבר',
+];
+
+const PAGE_VARIANTS = {
+  hidden: { opacity: 0 },
+  visible: {
+    opacity: 1,
+    transition: { staggerChildren: 0.08 },
+  },
+};
+
+const ITEM_VARIANTS = {
+  hidden: { opacity: 0, y: 12 },
+  visible: {
+    opacity: 1,
+    y: 0,
+    transition: { duration: 0.35, ease: 'easeOut' as const },
+  },
+};
+
+const newLocalId = (): string =>
+  typeof crypto !== 'undefined' && 'randomUUID' in crypto
+    ? crypto.randomUUID()
+    : `tmp-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+
+const isProjectionItem = (
+  item: TransactionListItem,
+): item is Extract<TransactionListItem, { isProjection: true }> =>
+  (item as { isProjection?: boolean }).isProjection === true;
+
+const toDraftRow = (item: TransactionListItem): DraftRow | null => {
+  if (isProjectionItem(item)) return null;
+  const amountStr =
+    typeof item.amount === 'string' ? item.amount : String(item.amount);
+  const dateOnly = item.date ? item.date.slice(0, 10) : '';
+  const installmentsTotal = item.installmentsTotal ?? null;
+  const base: DraftRow = {
+    localId: newLocalId(),
+    serverId: item.id,
+    installmentsTotal,
+    description: item.description,
+    categoryId: item.categoryId ?? null,
+    amount: amountStr,
+    date: dateOnly,
+    status: 'idle',
+    errorMessage: null,
+    lastSavedSnapshot: null,
+    mode: installmentsTotal !== null ? 'installments' : 'none',
+    endDate: null,
+    isBiMonthly: false,
+  };
+  base.lastSavedSnapshot = snapshotOf(base);
+  return base;
+};
 
 export default function IncomePage() {
-  return (
-    <div className="p-6 md:p-8">
-      <header className="flex items-center gap-3 mb-2">
-        <TrendingUp className="text-accent" size={28} strokeWidth={1.5} />
-        <h1 className="heading-2">הכנסות</h1>
-      </header>
-      <p className="body-text-sm leading-relaxed">
-        הזנת הכנסות חודשיות ושנתיות לפי קטגוריות (משכורת, מענק, קצבה ועוד).
-      </p>
-      <div className="mt-8 bg-surface rounded-2xl shadow-sm border border-slate-100 p-8 text-center">
-        <p className="body-text">המסך יבנה במשימה TASK-02b-5.</p>
+  const now = new Date();
+  const [selectedMonth, setSelectedMonth] = useState<number>(
+    now.getMonth() + 1,
+  );
+  const [selectedYear, setSelectedYear] = useState<number>(now.getFullYear());
+  const [activeTab, setActiveTab] = useState<'monthly' | 'yearly'>('monthly');
+  const [rows, setRows] = useState<DraftRow[]>([]);
+  const [categories, setCategories] = useState<Category[]>([]);
+  const [isLoading, setIsLoading] = useState<boolean>(true);
+  const [error, setError] = useState<string | null>(null);
+  const [reloadKey, setReloadKey] = useState(0);
+
+  const [advancedModeForRowId, setAdvancedModeForRowId] = useState<
+    string | null
+  >(null);
+  const [addCategoryForRowId, setAddCategoryForRowId] = useState<
+    string | null
+  >(null);
+
+  const {
+    householdId,
+    isLoading: userLoading,
+    error: userError,
+  } = useCurrentUser();
+
+  const incomeCategories = useMemo(
+    () => categories.filter((c) => c.type === CategoryType.INCOME),
+    [categories],
+  );
+
+  useEffect(() => {
+    if (!householdId) return;
+    let cancelled = false;
+
+    const load = async () => {
+      setIsLoading(true);
+      setError(null);
+      const [txResult, catsResult] = await Promise.allSettled([
+        getTransactions(selectedMonth, selectedYear),
+        getCategories(),
+      ]);
+      if (cancelled) return;
+
+      if (catsResult.status === 'fulfilled') {
+        setCategories(catsResult.value);
+      } else {
+        console.error('Error loading categories:', catsResult.reason);
+      }
+
+      if (txResult.status === 'fulfilled') {
+        const knownCats =
+          catsResult.status === 'fulfilled' ? catsResult.value : categories;
+        const incomeCatIds = new Set(
+          knownCats
+            .filter((c) => c.type === CategoryType.INCOME)
+            .map((c) => c.id),
+        );
+        const draftRows: DraftRow[] = txResult.value
+          .filter(
+            (item) =>
+              !isProjectionItem(item) &&
+              item.categoryId !== null &&
+              incomeCatIds.has(item.categoryId),
+          )
+          .map((item) => toDraftRow(item))
+          .filter((r): r is DraftRow => r !== null);
+        setRows(draftRows);
+      } else {
+        console.error('Error loading transactions:', txResult.reason);
+        setRows([]);
+        setError('שגיאה בטעינת ההכנסות. נסה לרענן את הדף.');
+      }
+
+      setIsLoading(false);
+    };
+
+    load();
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedMonth, selectedYear, householdId, reloadKey]);
+
+  const handleRowsChange = useCallback((next: DraftRow[]) => {
+    setRows(next);
+  }, []);
+
+  const handleAfterAdvancedModeSave = useCallback(() => {
+    setReloadKey((k) => k + 1);
+  }, []);
+
+  const handleAdvancedModeRequest = useCallback((localId: string) => {
+    setAdvancedModeForRowId(localId);
+  }, []);
+
+  const handleAdvancedModeConfirm = useCallback(
+    (result: AdvancedModeResult) => {
+      if (!advancedModeForRowId) return;
+      setRows((prev) =>
+        prev.map((r) => {
+          if (r.localId !== advancedModeForRowId) return r;
+          const status =
+            r.status === 'idle' || r.status === 'synced' ? 'dirty' : r.status;
+          if (result.mode === 'installments') {
+            return {
+              ...r,
+              mode: 'installments',
+              installmentsTotal: result.installmentsTotal,
+              endDate: null,
+              isBiMonthly: false,
+              status,
+            };
+          }
+          if (result.mode === 'recurring') {
+            return {
+              ...r,
+              mode: 'recurring',
+              installmentsTotal: null,
+              endDate: result.endDate,
+              isBiMonthly: result.isBiMonthly,
+              status,
+            };
+          }
+          return {
+            ...r,
+            mode: 'none',
+            installmentsTotal: null,
+            endDate: null,
+            isBiMonthly: false,
+            status,
+          };
+        }),
+      );
+      setAdvancedModeForRowId(null);
+    },
+    [advancedModeForRowId],
+  );
+
+  const handleAddCategoryRequest = useCallback((localId: string) => {
+    setAddCategoryForRowId(localId);
+  }, []);
+
+  const handleCategoryCreated = useCallback(
+    (newCategory: Category) => {
+      setCategories((prev) => [...prev, newCategory]);
+      if (addCategoryForRowId) {
+        setRows((prev) =>
+          prev.map((r) =>
+            r.localId === addCategoryForRowId
+              ? {
+                  ...r,
+                  categoryId: newCategory.id,
+                  status:
+                    r.status === 'idle' || r.status === 'synced'
+                      ? 'dirty'
+                      : r.status,
+                }
+              : r,
+          ),
+        );
+      }
+      setAddCategoryForRowId(null);
+    },
+    [addCategoryForRowId],
+  );
+
+  const advancedModeRow = useMemo(
+    () => rows.find((r) => r.localId === advancedModeForRowId) ?? null,
+    [advancedModeForRowId, rows],
+  );
+
+  if (userLoading) {
+    return (
+      <div className="p-6 md:p-8 space-y-6">
+        <div className="bg-slate-100 animate-pulse rounded-2xl h-16" />
+        <div className="bg-slate-100 animate-pulse rounded-2xl h-64" />
       </div>
-    </div>
+    );
+  }
+
+  if (userError || !householdId) {
+    return (
+      <div className="p-6 md:p-8">
+        <div className="bg-surface rounded-2xl shadow-sm border border-red-100 p-6 flex items-center gap-3">
+          <AlertCircle
+            className="text-red-500"
+            size={22}
+            strokeWidth={ICON_STROKE}
+          />
+          <p className="body-text text-red-500">
+            {userError ?? 'לא נמצא משק בית עבור המשתמש'}
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  const currentYear = new Date().getFullYear();
+  const years: number[] = [];
+  for (let y = currentYear + 1; y >= currentYear - 5; y -= 1) {
+    years.push(y);
+  }
+
+  return (
+    <motion.div
+      variants={PAGE_VARIANTS}
+      initial="hidden"
+      animate="visible"
+      className="p-6 md:p-8 space-y-4"
+    >
+      <motion.header
+        variants={ITEM_VARIANTS}
+        className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4"
+      >
+        <div className="flex items-start gap-3">
+          <TrendingUp
+            className="text-accent mt-1"
+            size={28}
+            strokeWidth={ICON_STROKE}
+          />
+          <div>
+            <h1 className="heading-2">הכנסות</h1>
+            <p className="body-text-sm text-slate-500 leading-relaxed mt-1">
+              הזן הכנסות חודשיות לפי קטגוריות: משכורת, מענק, קצבה ועוד
+            </p>
+          </div>
+        </div>
+        <div className="flex items-center gap-2 bg-surface p-1 rounded-xl shadow-sm border border-slate-100">
+          <button
+            type="button"
+            disabled
+            onClick={() => setActiveTab('yearly')}
+            className={`px-4 py-1.5 rounded-lg label-text transition-all duration-200 ${
+              activeTab === 'yearly'
+                ? 'bg-accent text-white'
+                : 'text-slate-400 cursor-not-allowed'
+            }`}
+            title="בקרוב"
+          >
+            שנתי
+          </button>
+          <button
+            type="button"
+            onClick={() => setActiveTab('monthly')}
+            className={`px-4 py-1.5 rounded-lg label-text transition-all duration-200 ${
+              activeTab === 'monthly'
+                ? 'bg-accent text-white'
+                : 'text-slate-500 hover:text-primary'
+            }`}
+          >
+            חודשי
+          </button>
+        </div>
+      </motion.header>
+
+      <motion.section
+        variants={ITEM_VARIANTS}
+        className="flex items-center gap-3"
+      >
+        <div className="relative">
+          <select
+            value={selectedYear}
+            onChange={(e) => setSelectedYear(Number(e.target.value))}
+            aria-label="בחירת שנה"
+            className="appearance-none bg-surface border border-slate-200 px-8 py-2 rounded-xl label-text text-primary focus:outline-none focus:border-accent shadow-sm cursor-pointer"
+          >
+            {years.map((y) => (
+              <option key={y} value={y}>
+                {y}
+              </option>
+            ))}
+          </select>
+          <ChevronDown
+            size={14}
+            strokeWidth={ICON_STROKE}
+            className="absolute left-3 top-3.5 text-slate-400 pointer-events-none"
+          />
+        </div>
+
+        <div className="relative">
+          <select
+            value={selectedMonth}
+            onChange={(e) => setSelectedMonth(Number(e.target.value))}
+            aria-label="בחירת חודש"
+            className="appearance-none bg-surface border border-slate-200 px-8 py-2 rounded-xl label-text text-primary focus:outline-none focus:border-accent shadow-sm cursor-pointer"
+          >
+            {HEBREW_MONTHS.map((label, idx) => (
+              <option key={label} value={idx + 1}>
+                {label}
+              </option>
+            ))}
+          </select>
+          <ChevronDown
+            size={14}
+            strokeWidth={ICON_STROKE}
+            className="absolute left-3 top-3.5 text-slate-400 pointer-events-none"
+          />
+        </div>
+
+        <div className="w-10 h-10 bg-surface border border-slate-200 rounded-xl flex items-center justify-center text-slate-400 shadow-sm">
+          <Calendar size={18} strokeWidth={ICON_STROKE} />
+        </div>
+      </motion.section>
+
+      {error && (
+        <motion.div
+          variants={ITEM_VARIANTS}
+          className="bg-surface rounded-2xl shadow-sm border border-red-100 p-4 flex items-center gap-3"
+        >
+          <AlertCircle
+            className="text-red-500"
+            size={20}
+            strokeWidth={ICON_STROKE}
+          />
+          <p className="body-text text-red-500">{error}</p>
+        </motion.div>
+      )}
+
+      <motion.div variants={ITEM_VARIANTS}>
+        <TransactionTable
+          rows={rows}
+          categories={incomeCategories}
+          householdId={householdId}
+          frequency={CategoryFrequency.MONTHLY}
+          monthConstraint={selectedMonth}
+          yearConstraint={selectedYear}
+          onChange={handleRowsChange}
+          isLoading={isLoading}
+          onAddCategoryRequest={handleAddCategoryRequest}
+          onAdvancedModeRequest={handleAdvancedModeRequest}
+          onAfterAdvancedModeSave={handleAfterAdvancedModeSave}
+          showTemplatesButton={false}
+        />
+      </motion.div>
+
+      <AdvancedModeModal
+        isOpen={advancedModeForRowId !== null}
+        initialMode={advancedModeRow?.mode ?? 'none'}
+        initialInstallmentsTotal={advancedModeRow?.installmentsTotal ?? null}
+        initialEndDate={advancedModeRow?.endDate ?? null}
+        initialIsBiMonthly={advancedModeRow?.isBiMonthly ?? false}
+        totalAmount={advancedModeRow?.amount ?? ''}
+        onClose={() => setAdvancedModeForRowId(null)}
+        onConfirm={handleAdvancedModeConfirm}
+        showInstallments={false}
+        showBiMonthly={false}
+      />
+
+      <CategoryFormModal
+        isOpen={addCategoryForRowId !== null}
+        type={CategoryType.INCOME}
+        householdId={householdId}
+        existingCategories={incomeCategories}
+        onClose={() => setAddCategoryForRowId(null)}
+        onCreated={handleCategoryCreated}
+      />
+    </motion.div>
   );
 }

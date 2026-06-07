@@ -2,10 +2,12 @@ import {
   forwardRef,
   useCallback,
   useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
 } from 'react';
+import { createPortal } from 'react-dom';
 import { ChevronDown, Plus, Search } from 'lucide-react';
 import type { Category } from '@gutplus/shared';
 import { ICON_STROKE } from '../../constants/ui';
@@ -40,9 +42,17 @@ const CategoryCombobox = forwardRef<HTMLDivElement, CategoryComboboxProps>(
   ) {
     const wrapperRef = useRef<HTMLDivElement | null>(null);
     const inputRef = useRef<HTMLInputElement | null>(null);
+    const menuRef = useRef<HTMLUListElement | null>(null);
     const [query, setQuery] = useState('');
     const [isOpen, setIsOpen] = useState(false);
     const [highlightIndex, setHighlightIndex] = useState(0);
+    const [menuPos, setMenuPos] = useState<{
+      left: number;
+      width: number;
+      top?: number;
+      bottom?: number;
+      maxHeight: number;
+    } | null>(null);
 
     // מחזירים את שליפת הקטגוריה הספציפית שנבחרה כרגע (בשביל להציג את השם שלה כשהתפריט סגור)
     const selectedCategory = useMemo(
@@ -63,8 +73,10 @@ const CategoryCombobox = forwardRef<HTMLDivElement, CategoryComboboxProps>(
     useEffect(() => {
       if (!isOpen) return;
       const handler = (event: MouseEvent) => {
-        if (!wrapperRef.current) return;
-        if (!wrapperRef.current.contains(event.target as Node)) {
+        const target = event.target as Node;
+        const insideWrapper = wrapperRef.current?.contains(target) ?? false;
+        const insideMenu = menuRef.current?.contains(target) ?? false;
+        if (!insideWrapper && !insideMenu) {
           setIsOpen(false);
           setQuery('');
           onBlurOutside?.();
@@ -77,6 +89,49 @@ const CategoryCombobox = forwardRef<HTMLDivElement, CategoryComboboxProps>(
     useEffect(() => {
       setHighlightIndex(0);
     }, [query, isOpen]);
+
+    // ממקמים את הרשימה דרך portal עם position: fixed כדי שתצוף מעל הכל
+    // ולא תיחתך ע"י ה-overflow של מיכל השורות.
+    const updatePosition = useCallback(() => {
+      const el = wrapperRef.current;
+      if (!el) return;
+      const rect = el.getBoundingClientRect();
+      const margin = 8;
+      const gap = 4;
+      const desired = 264;
+      const spaceBelow = window.innerHeight - rect.bottom - margin;
+      const spaceAbove = rect.top - margin;
+      const openUp = spaceBelow < Math.min(desired, 160) && spaceAbove > spaceBelow;
+      if (openUp) {
+        setMenuPos({
+          left: rect.left,
+          width: rect.width,
+          bottom: window.innerHeight - rect.top + gap,
+          maxHeight: Math.max(120, Math.min(desired, spaceAbove)),
+        });
+      } else {
+        setMenuPos({
+          left: rect.left,
+          width: rect.width,
+          top: rect.bottom + gap,
+          maxHeight: Math.max(120, Math.min(desired, spaceBelow)),
+        });
+      }
+    }, []);
+
+    useLayoutEffect(() => {
+      if (!isOpen) {
+        setMenuPos(null);
+        return;
+      }
+      updatePosition();
+      window.addEventListener('scroll', updatePosition, true);
+      window.addEventListener('resize', updatePosition);
+      return () => {
+        window.removeEventListener('scroll', updatePosition, true);
+        window.removeEventListener('resize', updatePosition);
+      };
+    }, [isOpen, updatePosition]);
 
     const handleSelect = useCallback(
       (categoryId: string) => {
@@ -174,10 +229,20 @@ const CategoryCombobox = forwardRef<HTMLDivElement, CategoryComboboxProps>(
           />
         </div>
 
-        {isOpen && (
+        {isOpen && menuPos && createPortal(
           <ul
+            ref={menuRef}
             role="listbox"
-            className="absolute z-30 mt-1 max-h-64 w-full overflow-y-auto rounded-xl border border-slate-200 bg-white shadow-lg"
+            dir="rtl"
+            style={{
+              position: 'fixed',
+              left: menuPos.left,
+              width: menuPos.width,
+              top: menuPos.top,
+              bottom: menuPos.bottom,
+              maxHeight: menuPos.maxHeight,
+            }}
+            className="z-50 overflow-y-auto rounded-xl border border-slate-200 bg-white shadow-lg"
           >
             {filteredOptions.length === 0 && (
               <li className="px-4 py-3 body-text-sm text-slate-400">
@@ -229,7 +294,8 @@ const CategoryCombobox = forwardRef<HTMLDivElement, CategoryComboboxProps>(
                 הוסף קטגוריה חדשה
               </li>
             )}
-          </ul>
+          </ul>,
+          document.body,
         )}
       </div>
     );

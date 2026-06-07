@@ -17,6 +17,10 @@ interface AdvancedModeModalProps {
   totalAmount: string;
   onClose: () => void;
   onConfirm: (result: AdvancedModeResult) => void;
+  /** הצגת לשונית הפיצול לתשלומים. ברירת מחדל true (הוצאות). */
+  showInstallments?: boolean;
+  /** הצגת אפשרות עסקה דו-חודשית בלשונית הקבועה. ברירת מחדל true (הוצאות). */
+  showBiMonthly?: boolean;
 }
 
 type Tab = 'installments' | 'recurring';
@@ -30,9 +34,13 @@ export default function AdvancedModeModal({
   totalAmount,
   onClose,
   onConfirm,
+  showInstallments = true,
+  showBiMonthly = true,
 }: AdvancedModeModalProps) {
   const initialTab: Tab =
-    initialMode === 'recurring' ? 'recurring' : 'installments';
+    !showInstallments || initialMode === 'recurring'
+      ? 'recurring'
+      : 'installments';
 
   const [tab, setTab] = useState<Tab>(initialTab);
 
@@ -51,20 +59,26 @@ export default function AdvancedModeModal({
 
   useEffect(() => {
     if (!isOpen) return;
-    setTab(initialMode === 'recurring' ? 'recurring' : 'installments');
+    setTab(
+      !showInstallments || initialMode === 'recurring'
+        ? 'recurring'
+        : 'installments',
+    );
     setInstallmentsEnabled(
       initialMode === 'installments' && initialInstallmentsTotal !== null,
     );
     setInstallmentsCount(initialInstallmentsTotal ?? 3);
     setHasEndDate(initialMode === 'recurring' && initialEndDate !== null);
     setEndDate(initialEndDate ?? '');
-    setIsBiMonthly(initialIsBiMonthly);
+    setIsBiMonthly(showBiMonthly ? initialIsBiMonthly : false);
   }, [
     isOpen,
     initialMode,
     initialInstallmentsTotal,
     initialEndDate,
     initialIsBiMonthly,
+    showInstallments,
+    showBiMonthly,
   ]);
 
   const total = parseFloat(totalAmount);
@@ -139,24 +153,26 @@ export default function AdvancedModeModal({
               </button>
             </div>
 
-            <div className="flex items-center gap-1 bg-background/60 p-1 rounded-xl mb-5">
-              <button
-                type="button"
-                onClick={() => setTab('installments')}
-                className={tabButtonClass(tab === 'installments')}
-              >
-                <CreditCard size={18} strokeWidth={1.5} />
-                תשלומים
-              </button>
-              <button
-                type="button"
-                onClick={() => setTab('recurring')}
-                className={tabButtonClass(tab === 'recurring')}
-              >
-                <Repeat size={18} strokeWidth={1.5} />
-                עסקה קבועה
-              </button>
-            </div>
+            {showInstallments && (
+              <div className="flex items-center gap-1 bg-background/60 p-1 rounded-xl mb-5">
+                <button
+                  type="button"
+                  onClick={() => setTab('installments')}
+                  className={tabButtonClass(tab === 'installments')}
+                >
+                  <CreditCard size={18} strokeWidth={1.5} />
+                  תשלומים
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setTab('recurring')}
+                  className={tabButtonClass(tab === 'recurring')}
+                >
+                  <Repeat size={18} strokeWidth={1.5} />
+                  עסקה קבועה
+                </button>
+              </div>
+            )}
 
             {tab === 'installments' ? (
               <div className="space-y-4">
@@ -208,15 +224,17 @@ export default function AdvancedModeModal({
                   תיווצר עסקה חוזרת המופיעה אוטומטית בכל חודש.
                 </p>
 
-                <label className="flex items-center gap-3 cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={isBiMonthly}
-                    onChange={(e) => setIsBiMonthly(e.target.checked)}
-                    className="w-5 h-5 rounded border-slate-300 text-accent focus:ring-accent"
-                  />
-                  <span className="body-text">עסקה דו-חודשית</span>
-                </label>
+                {showBiMonthly && (
+                  <label className="flex items-center gap-3 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={isBiMonthly}
+                      onChange={(e) => setIsBiMonthly(e.target.checked)}
+                      className="w-5 h-5 rounded border-slate-300 text-accent focus:ring-accent"
+                    />
+                    <span className="body-text">עסקה דו-חודשית</span>
+                  </label>
+                )}
 
                 <label className="flex items-center gap-3 cursor-pointer">
                   <input
