@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
-import { CreditCard, Trash2, X } from 'lucide-react';
+import { CreditCard, Repeat, Trash2, X } from 'lucide-react';
 import type { Category } from '@gutplus/shared';
 import { ICON_STROKE } from '../../constants/ui';
 import CategoryCombobox from './CategoryCombobox';
@@ -20,7 +20,7 @@ interface TransactionRowProps {
   onRemove: () => void;
   onRetry: () => void;
   onAddCategoryRequest?: () => void;
-  onInstallmentsRequest?: () => void;
+  onAdvancedModeRequest?: () => void;
 }
 
 type FieldKey = 'description' | 'categoryId' | 'amount' | 'date';
@@ -95,7 +95,7 @@ export default function TransactionRow({
   onRemove,
   onRetry,
   onAddCategoryRequest,
-  onInstallmentsRequest,
+  onAdvancedModeRequest,
 }: TransactionRowProps) {
   const rowRef = useRef<HTMLDivElement | null>(null);
   const descriptionRef = useRef<HTMLInputElement | null>(null);
@@ -262,28 +262,45 @@ export default function TransactionRow({
         </div>
 
         <div className="flex items-center justify-end gap-2 md:pt-1">
-          {onInstallmentsRequest && row.serverId === null && (
+          {onAdvancedModeRequest && row.serverId === null && (
             <button
               type="button"
-              onClick={onInstallmentsRequest}
-              aria-label="הגדר תשלומים"
+              onClick={onAdvancedModeRequest}
+              aria-label={
+                row.mode === 'recurring'
+                  ? 'עסקה קבועה'
+                  : row.mode === 'installments' && row.installmentsTotal
+                    ? `${row.installmentsTotal} תשלומים`
+                    : 'הגדר מצב מתקדם'
+              }
               title={
-                row.installmentsTotal
-                  ? `${row.installmentsTotal} תשלומים`
-                  : 'הגדר תשלומים'
+                row.mode === 'recurring'
+                  ? 'עסקה קבועה'
+                  : row.mode === 'installments' && row.installmentsTotal
+                    ? `${row.installmentsTotal} תשלומים`
+                    : 'הגדר מצב מתקדם'
               }
               className={`p-2 rounded-lg transition-colors duration-200 flex items-center gap-1 ${
-                row.installmentsTotal
+                row.mode !== 'none'
                   ? 'text-accent bg-accent/10 hover:bg-accent/20'
                   : 'text-slate-400 hover:text-accent hover:bg-slate-100'
               }`}
             >
-              <CreditCard size={18} strokeWidth={ICON_STROKE} />
-              {row.installmentsTotal ? (
-                <span className="body-text-sm font-semibold">
-                  {row.installmentsTotal}
-                </span>
-              ) : null}
+              {row.mode === 'recurring' ? (
+                <>
+                  <Repeat size={18} strokeWidth={ICON_STROKE} />
+                  <span className="body-text-sm font-semibold">קבוע</span>
+                </>
+              ) : (
+                <>
+                  <CreditCard size={18} strokeWidth={ICON_STROKE} />
+                  {row.mode === 'installments' && row.installmentsTotal ? (
+                    <span className="body-text-sm font-semibold">
+                      {row.installmentsTotal}
+                    </span>
+                  ) : null}
+                </>
+              )}
             </button>
           )}
           <SaveIndicator

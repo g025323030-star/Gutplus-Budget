@@ -3,6 +3,7 @@ import axios from 'axios';
 import { AnimatePresence, motion } from 'framer-motion';
 import { AlertTriangle, ListPlus, Plus } from 'lucide-react';
 import type { Category, CategoryFrequency } from '@gutplus/shared';
+import { TransactionFrequency } from '@gutplus/shared';
 import { ICON_STROKE } from '../../constants/ui';
 import {
   createTransaction,
@@ -47,8 +48,8 @@ interface TransactionTableProps {
   focusedRowId?: string | null;
   onRowFocus?: (localId: string) => void;
   onAddCategoryRequest?: (localId: string) => void;
-  onInstallmentsRequest?: (localId: string) => void;
-  onAfterInstallmentsSave?: () => void;
+  onAdvancedModeRequest?: (localId: string) => void;
+  onAfterAdvancedModeSave?: () => void;
   onFillTemplates?: () => void;
   showTemplatesButton?: boolean;
 }
@@ -65,8 +66,8 @@ export default function TransactionTable({
   focusedRowId = null,
   onRowFocus,
   onAddCategoryRequest,
-  onInstallmentsRequest,
-  onAfterInstallmentsSave,
+  onAdvancedModeRequest,
+  onAfterAdvancedModeSave,
   onFillTemplates,
   showTemplatesButton = false,
 }: TransactionTableProps) {
@@ -147,24 +148,37 @@ export default function TransactionTable({
 
       try {
         let savedId = current.serverId;
-        const isInstallments =
+        const isUnsavedInstallments =
           !savedId &&
+          current.mode === 'installments' &&
           current.installmentsTotal !== null &&
           current.installmentsTotal >= 2;
-        const payload = {
+        const isUnsavedRecurring = !savedId && current.mode === 'recurring';
+
+        const base = {
           amount: current.amount,
           date: current.date,
           description: current.description.trim(),
           frequency,
           householdId,
           categoryId: current.categoryId ?? undefined,
-          ...(isInstallments
-            ? { installmentsTotal: current.installmentsTotal! }
-            : {}),
         };
 
+        const payload = isUnsavedInstallments
+          ? { ...base, installmentsTotal: current.installmentsTotal! }
+          : isUnsavedRecurring
+            ? {
+                ...base,
+                isRecurring: true as const,
+                recurringFrequency: current.isBiMonthly
+                  ? TransactionFrequency.BI_MONTHLY
+                  : TransactionFrequency.MONTHLY,
+                ...(current.endDate ? { endDate: current.endDate } : {}),
+              }
+            : base;
+
         if (savedId) {
-          await updateTransaction(savedId, payload);
+          await updateTransaction(savedId, base);
         } else {
           const created = await createTransaction(payload);
           if (created.kind === 'transactions' && created.data.length > 0) {
@@ -180,8 +194,8 @@ export default function TransactionTable({
         });
         scheduleSyncedFade(localId);
 
-        if (isInstallments) {
-          onAfterInstallmentsSave?.();
+        if (isUnsavedInstallments || isUnsavedRecurring) {
+          onAfterAdvancedModeSave?.();
         }
 
         if (pendingResave.current[localId]) {
@@ -202,7 +216,7 @@ export default function TransactionTable({
       yearConstraint,
       patchRow,
       scheduleSyncedFade,
-      onAfterInstallmentsSave,
+      onAfterAdvancedModeSave,
     ],
   );
 
@@ -262,6 +276,9 @@ export default function TransactionTable({
       status: 'idle',
       errorMessage: null,
       lastSavedSnapshot: null,
+      mode: 'none',
+      endDate: null,
+      isBiMonthly: false,
     };
     newRowFocus.current = localId;
     const next = [...rowsRef.current, newRow];
@@ -402,9 +419,9 @@ export default function TransactionTable({
                   ? () => onAddCategoryRequest(row.localId)
                   : undefined
               }
-              onInstallmentsRequest={
-                onInstallmentsRequest
-                  ? () => onInstallmentsRequest(row.localId)
+              onAdvancedModeRequest={
+                onAdvancedModeRequest
+                  ? () => onAdvancedModeRequest(row.localId)
                   : undefined
               }
             />

@@ -8,7 +8,8 @@ import { useCurrentUser } from '../hooks/useCurrentUser';
 import { getTransactions, createTransaction } from '../services/transactions.service';
 import { getCategories } from '../services/categories.service';
 import TransactionTable from '../components/transactions/TransactionTable';
-import InstallmentsModal from '../components/transactions/InstallmentsModal';
+import AdvancedModeModal from '../components/transactions/AdvancedModeModal';
+import type { AdvancedModeResult } from '../components/transactions/AdvancedModeModal';
 import CategoryFormModal from '../components/transactions/CategoryFormModal';
 import CategoryHelperPanel from '../components/expenses/CategoryHelperPanel';
 import type { DraftRow } from '../components/transactions/types';
@@ -65,10 +66,11 @@ const toDraftRow = (item: TransactionListItem): DraftRow | null => {
   const amountStr =
     typeof item.amount === 'string' ? item.amount : String(item.amount);
   const dateOnly = item.date ? item.date.slice(0, 10) : '';
+  const installmentsTotal = item.installmentsTotal ?? null;
   const base: DraftRow = {
     localId: newLocalId(),
     serverId: item.id,
-    installmentsTotal: item.installmentsTotal ?? null,
+    installmentsTotal,
     description: item.description,
     categoryId: item.categoryId ?? null,
     amount: amountStr,
@@ -76,6 +78,9 @@ const toDraftRow = (item: TransactionListItem): DraftRow | null => {
     status: 'idle',
     errorMessage: null,
     lastSavedSnapshot: null,
+    mode: installmentsTotal !== null ? 'installments' : 'none',
+    endDate: null,
+    isBiMonthly: false,
   };
   base.lastSavedSnapshot = snapshotOf(base);
   return base;
@@ -96,7 +101,7 @@ export default function ExpensesPage() {
   const [reloadKey, setReloadKey] = useState(0);
 
   const [focusedRowId, setFocusedRowId] = useState<string | null>(null);
-  const [installmentsForRowId, setInstallmentsForRowId] = useState<
+  const [advancedModeForRowId, setAdvancedModeForRowId] = useState<
     string | null
   >(null);
   const [addCategoryForRowId, setAddCategoryForRowId] = useState<
@@ -192,7 +197,7 @@ export default function ExpensesPage() {
     setFocusedRowId(localId);
   }, []);
 
-  const handleAfterInstallmentsSave = useCallback(() => {
+  const handleAfterAdvancedModeSave = useCallback(() => {
     setReloadKey((k) => k + 1);
   }, []);
 
@@ -246,6 +251,9 @@ export default function ExpensesPage() {
           status: 'idle',
           errorMessage: null,
           lastSavedSnapshot: null,
+          mode: 'none',
+          endDate: null,
+          isBiMonthly: false,
         });
       }
       return newRows;
@@ -282,30 +290,51 @@ export default function ExpensesPage() {
     setIsSuggestionModalOpen(true);
   }, [selectedMainCategoryId, globalExpenseSubcategories, buildTemplateRows]);
 
-  const handleInstallmentsRequest = useCallback((localId: string) => {
-    setInstallmentsForRowId(localId);
+  const handleAdvancedModeRequest = useCallback((localId: string) => {
+    setAdvancedModeForRowId(localId);
   }, []);
 
-  const handleInstallmentsConfirm = useCallback(
-    (count: number | null) => {
-      if (!installmentsForRowId) return;
+  const handleAdvancedModeConfirm = useCallback(
+    (result: AdvancedModeResult) => {
+      if (!advancedModeForRowId) return;
       setRows((prev) =>
-        prev.map((r) =>
-          r.localId === installmentsForRowId
-            ? {
-                ...r,
-                installmentsTotal: count,
-                status:
-                  r.status === 'idle' || r.status === 'synced'
-                    ? 'dirty'
-                    : r.status,
-              }
-            : r,
-        ),
+        prev.map((r) => {
+          if (r.localId !== advancedModeForRowId) return r;
+          const status =
+            r.status === 'idle' || r.status === 'synced' ? 'dirty' : r.status;
+          if (result.mode === 'installments') {
+            return {
+              ...r,
+              mode: 'installments',
+              installmentsTotal: result.installmentsTotal,
+              endDate: null,
+              isBiMonthly: false,
+              status,
+            };
+          }
+          if (result.mode === 'recurring') {
+            return {
+              ...r,
+              mode: 'recurring',
+              installmentsTotal: null,
+              endDate: result.endDate,
+              isBiMonthly: result.isBiMonthly,
+              status,
+            };
+          }
+          return {
+            ...r,
+            mode: 'none',
+            installmentsTotal: null,
+            endDate: null,
+            isBiMonthly: false,
+            status,
+          };
+        }),
       );
-      setInstallmentsForRowId(null);
+      setAdvancedModeForRowId(null);
     },
-    [installmentsForRowId],
+    [advancedModeForRowId],
   );
 
   const handleAddCategoryRequest = useCallback((localId: string) => {
@@ -402,9 +431,9 @@ export default function ExpensesPage() {
     setSuggestedRows([]);
   }, []);
 
-  const installmentsRow = useMemo(
-    () => rows.find((r) => r.localId === installmentsForRowId) ?? null,
-    [installmentsForRowId, rows],
+  const advancedModeRow = useMemo(
+    () => rows.find((r) => r.localId === advancedModeForRowId) ?? null,
+    [advancedModeForRowId, rows],
   );
 
   const focusedRow = useMemo(
@@ -581,8 +610,8 @@ export default function ExpensesPage() {
             focusedRowId={focusedRowId}
             onRowFocus={handleRowFocus}
             onAddCategoryRequest={handleAddCategoryRequest}
-            onInstallmentsRequest={handleInstallmentsRequest}
-            onAfterInstallmentsSave={handleAfterInstallmentsSave}
+            onAdvancedModeRequest={handleAdvancedModeRequest}
+            onAfterAdvancedModeSave={handleAfterAdvancedModeSave}
             onFillTemplates={handleFillSelectedCategoryTemplates}
             showTemplatesButton={true}
           />
@@ -611,12 +640,15 @@ export default function ExpensesPage() {
         onConfirm={handleSaveSuggestedRows}
       />
 
-      <InstallmentsModal
-        isOpen={installmentsForRowId !== null}
-        initialCount={installmentsRow?.installmentsTotal ?? null}
-        totalAmount={installmentsRow?.amount ?? ''}
-        onClose={() => setInstallmentsForRowId(null)}
-        onConfirm={handleInstallmentsConfirm}
+      <AdvancedModeModal
+        isOpen={advancedModeForRowId !== null}
+        initialMode={advancedModeRow?.mode ?? 'none'}
+        initialInstallmentsTotal={advancedModeRow?.installmentsTotal ?? null}
+        initialEndDate={advancedModeRow?.endDate ?? null}
+        initialIsBiMonthly={advancedModeRow?.isBiMonthly ?? false}
+        totalAmount={advancedModeRow?.amount ?? ''}
+        onClose={() => setAdvancedModeForRowId(null)}
+        onConfirm={handleAdvancedModeConfirm}
       />
 
       <CategoryFormModal

@@ -1,5 +1,7 @@
 import type { RowStatus } from './SaveIndicator';
 
+export type DraftRowMode = 'none' | 'installments' | 'recurring';
+
 export interface DraftRowSnapshot {
   description: string;
   categoryId: string | null;
@@ -15,6 +17,9 @@ export interface DraftRow extends DraftRowSnapshot {
   errorMessage: string | null;
   lastSavedSnapshot: DraftRowSnapshot | null;
   currentInstallment?: number;
+  mode: DraftRowMode;
+  endDate: string | null;
+  isBiMonthly: boolean;
 }
 
 export const snapshotOf = (row: DraftRow): DraftRowSnapshot => ({
