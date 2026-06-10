@@ -6,6 +6,7 @@ interface CurrentUserState {
   userId: string | null;
   householdId: string | null;
   expenseTemplatesInitialized: boolean;
+  incomeTemplatesInitialized: boolean;
   isLoading: boolean;
   error: string | null;
 }
@@ -17,6 +18,7 @@ let cache: {
   userId: string;
   householdId: string;
   expenseTemplatesInitialized: boolean;
+  incomeTemplatesInitialized: boolean;
 } | null = null;
 
 export function useCurrentUser(): CurrentUserState {
@@ -26,6 +28,7 @@ export function useCurrentUser(): CurrentUserState {
           userId: cache.userId,
           householdId: cache.householdId,
           expenseTemplatesInitialized: cache.expenseTemplatesInitialized,
+          incomeTemplatesInitialized: cache.incomeTemplatesInitialized,
           isLoading: false,
           error: null,
         }
@@ -33,6 +36,7 @@ export function useCurrentUser(): CurrentUserState {
           userId: null,
           householdId: null,
           expenseTemplatesInitialized: false,
+          incomeTemplatesInitialized: false,
           isLoading: true,
           error: null,
         },
@@ -52,6 +56,9 @@ export function useCurrentUser(): CurrentUserState {
         const expenseTemplatesInitialized = Boolean(
           payload.expenseTemplatesInitialized,
         );
+        const incomeTemplatesInitialized = Boolean(
+          payload.incomeTemplatesInitialized,
+        );
 
         if (cancelled) return;
 
@@ -60,6 +67,7 @@ export function useCurrentUser(): CurrentUserState {
             userId: null,
             householdId: null,
             expenseTemplatesInitialized: false,
+            incomeTemplatesInitialized: false,
             isLoading: false,
             error: 'לא ניתן לזהות את המשתמש',
           });
@@ -67,13 +75,19 @@ export function useCurrentUser(): CurrentUserState {
         }
 
         if (householdId) {
-          cache = { userId, householdId, expenseTemplatesInitialized };
+          cache = {
+            userId,
+            householdId,
+            expenseTemplatesInitialized,
+            incomeTemplatesInitialized,
+          };
         }
 
         setState({
           userId,
           householdId,
           expenseTemplatesInitialized,
+          incomeTemplatesInitialized,
           isLoading: false,
           error: householdId ? null : 'לא נמצא משק בית עבור המשתמש',
         });
@@ -84,6 +98,7 @@ export function useCurrentUser(): CurrentUserState {
           userId: null,
           householdId: null,
           expenseTemplatesInitialized: false,
+          incomeTemplatesInitialized: false,
           isLoading: false,
           error: 'שגיאה בטעינת פרטי המשתמש',
         });

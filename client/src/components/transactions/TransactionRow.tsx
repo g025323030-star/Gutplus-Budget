@@ -10,6 +10,7 @@ import type { DraftRow } from './types';
 interface TransactionRowProps {
   row: DraftRow;
   categories: Category[];
+  descriptionPlaceholder?: string;
   monthConstraint?: number;
   yearConstraint: number;
   autoFocus?: boolean;
@@ -85,6 +86,7 @@ const validateField = (
 export default function TransactionRow({
   row,
   categories,
+  descriptionPlaceholder = 'לדוגמה: סופר',
   monthConstraint,
   yearConstraint,
   autoFocus = false,
@@ -190,7 +192,7 @@ export default function TransactionRow({
             onBlur={() =>
               setTouched((t) => ({ ...t, description: true }))
             }
-            placeholder="לדוגמה: סופר"
+            placeholder={descriptionPlaceholder}
             aria-label="תיאור"
             className={fieldClass('description')}
           />

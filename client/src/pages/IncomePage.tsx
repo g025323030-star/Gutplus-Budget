@@ -1,11 +1,11 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { motion } from 'framer-motion';
 import { AlertCircle, Calendar, ChevronDown, TrendingUp } from 'lucide-react';
 import { CategoryFrequency, CategoryType } from '@gutplus/shared';
 import type { Category, TransactionListItem } from '@gutplus/shared';
 import { ICON_STROKE } from '../constants/ui';
 import { useCurrentUser } from '../hooks/useCurrentUser';
-import { getTransactions } from '../services/transactions.service';
+import { getTransactions, createTransaction } from '../services/transactions.service';
 import { getCategories } from '../services/categories.service';
 import TransactionTable from '../components/transactions/TransactionTable';
 import AdvancedModeModal from '../components/transactions/AdvancedModeModal';
@@ -13,6 +13,7 @@ import type { AdvancedModeResult } from '../components/transactions/AdvancedMode
 import CategoryFormModal from '../components/transactions/CategoryFormModal';
 import type { DraftRow } from '../components/transactions/types';
 import { snapshotOf } from '../components/transactions/types';
+import { SuggestedRowsModal } from '../components/expenses/SuggestedRowsModal';
 
 const HEBREW_MONTHS = [
   'ינואר',
@@ -51,6 +52,9 @@ const newLocalId = (): string =>
     ? crypto.randomUUID()
     : `tmp-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
 
+const normDesc = (s: string): string =>
+  s.trim().replace(/\s+/g, ' ').toLowerCase();
+
 const isProjectionItem = (
   item: TransactionListItem,
 ): item is Extract<TransactionListItem, { isProjection: true }> =>
@@ -66,6 +70,9 @@ const toDraftRow = (item: TransactionListItem): DraftRow | null => {
     localId: newLocalId(),
     serverId: item.id,
     installmentsTotal,
+    isRecurring: false,
+    recurringFrequency: null,
+    recurringEndDate: null,
     description: item.description,
     categoryId: item.categoryId ?? null,
     amount: amountStr,
@@ -80,6 +87,20 @@ const toDraftRow = (item: TransactionListItem): DraftRow | null => {
   base.lastSavedSnapshot = snapshotOf(base);
   return base;
 };
+
+const INCOME_TEMPLATE_DESCRIPTIONS: string[] = [
+  'משכורת בעל',
+  'מלגת כולל',
+  'משכורת אישה',
+  'ביטוח לאומי - קצבת ילדים',
+  'ביטוח לאומי - קצבאות נוספות',
+  'סיוע בשכר דירה',
+  'סיוע מההורים - חודשי',
+  'הכנסה מנכס',
+  'כרטיסי מזון',
+  'תמיכות',
+  'שונות',
+];
 
 export default function IncomePage() {
   const now = new Date();
@@ -101,11 +122,20 @@ export default function IncomePage() {
     string | null
   >(null);
 
+  const [isSuggestionModalOpen, setIsSuggestionModalOpen] = useState(false);
+  const [suggestedRows, setSuggestedRows] = useState<DraftRow[]>([]);
+  const [isSavingTemplates, setIsSavingTemplates] = useState(false);
+
+  const inlineInjectedRef = useRef(false);
+
   const {
     householdId,
+    incomeTemplatesInitialized,
     isLoading: userLoading,
     error: userError,
   } = useCurrentUser();
+
+  const isFirstUse = !incomeTemplatesInitialized;
 
   const incomeCategories = useMemo(
     () => categories.filter((c) => c.type === CategoryType.INCOME),
@@ -164,6 +194,127 @@ export default function IncomePage() {
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedMonth, selectedYear, householdId, reloadKey]);
+
+  const buildIncomeTemplateRows = useCallback(
+    (currentRows: DraftRow[]): DraftRow[] => {
+      const used = new Set(currentRows.map((r) => normDesc(r.description)));
+      const date = `${selectedYear}-${String(selectedMonth).padStart(2, '0')}-01`;
+      const newRows: DraftRow[] = [];
+      for (const desc of INCOME_TEMPLATE_DESCRIPTIONS) {
+        const key = normDesc(desc);
+        if (used.has(key)) continue;
+        used.add(key);
+        newRows.push({
+          localId: newLocalId(),
+          serverId: null,
+          installmentsTotal: null,
+          isRecurring: false,
+          recurringFrequency: null,
+          recurringEndDate: null,
+          description: desc,
+          categoryId: null,
+          amount: '',
+          date,
+          status: 'idle',
+          errorMessage: null,
+          lastSavedSnapshot: null,
+          mode: 'none',
+          endDate: null,
+          isBiMonthly: false,
+        });
+      }
+      return newRows;
+    },
+    [selectedMonth, selectedYear],
+  );
+
+  // הזרקת שורות תבניות לטבלה בשימוש ראשון (once-only via ref)
+  useEffect(() => {
+    if (!householdId) return;
+    if (!isFirstUse) return;
+    if (isLoading) return;
+    if (inlineInjectedRef.current) return;
+
+    inlineInjectedRef.current = true;
+    setRows((prev) => [...prev, ...buildIncomeTemplateRows(prev)]);
+  }, [householdId, isFirstUse, isLoading, buildIncomeTemplateRows]);
+
+  const handleFillIncomeTemplates = useCallback(() => {
+    const newRows = buildIncomeTemplateRows(rows);
+    if (newRows.length === 0) {
+      alert('כל שורות ההכנסה המוצעות כבר קיימות בטבלה.');
+      return;
+    }
+    setSuggestedRows(newRows);
+    setIsSuggestionModalOpen(true);
+  }, [rows, buildIncomeTemplateRows]);
+
+  const handleSaveSuggestedRows = useCallback(async (rowsFromModal: DraftRow[]) => {
+    const validRows = rowsFromModal.filter(
+      (row) => row.amount && Number(row.amount) > 0 && row.categoryId,
+    );
+
+    if (validRows.length === 0) {
+      setIsSuggestionModalOpen(false);
+      setSuggestedRows([]);
+      return;
+    }
+
+    if (!householdId) return;
+
+    setIsSavingTemplates(true);
+    const savedRowsToAppend: DraftRow[] = [];
+
+    try {
+      for (const row of validRows) {
+        const payload = {
+          amount: String(row.amount),
+          date: row.date,
+          description: row.description.trim(),
+          frequency: CategoryFrequency.MONTHLY,
+          householdId: householdId,
+          categoryId: row.categoryId ?? undefined,
+          installmentsTotal: row.installmentsTotal ?? undefined,
+        };
+
+        const result = await createTransaction(payload);
+
+        if (result && result.kind === 'transactions' && result.data?.[0]) {
+          const serverData = result.data[0];
+
+          const savedRow: DraftRow = {
+            ...row,
+            serverId: serverData.id,
+            status: 'synced',
+            lastSavedSnapshot: null,
+          };
+          savedRow.lastSavedSnapshot = snapshotOf(savedRow);
+
+          savedRowsToAppend.push(savedRow);
+        } else {
+          savedRowsToAppend.push({
+            ...row,
+            status: 'error',
+            errorMessage: 'השמירה בשרת נכשלה',
+          });
+        }
+      }
+
+      setRows((prev) => [...prev, ...savedRowsToAppend]);
+      setIsSuggestionModalOpen(false);
+      setSuggestedRows([]);
+    } catch (err) {
+      console.error('Failed to save template rows:', err);
+      alert('התרחשה שגיאה בעת שמירת הנתונים.');
+    } finally {
+      setIsSavingTemplates(false);
+    }
+  }, [householdId]);
+
+  const handleCloseSuggestionModal = useCallback(() => {
+    setIsSuggestionModalOpen(false);
+    setSuggestedRows([]);
+  }, []);
 
   const handleRowsChange = useCallback((next: DraftRow[]) => {
     setRows(next);
@@ -413,9 +564,27 @@ export default function IncomePage() {
           onAddCategoryRequest={handleAddCategoryRequest}
           onAdvancedModeRequest={handleAdvancedModeRequest}
           onAfterAdvancedModeSave={handleAfterAdvancedModeSave}
-          showTemplatesButton={false}
+          showTemplatesButton={!isFirstUse}
+          onFillTemplates={handleFillIncomeTemplates}
+          title="רשימת הכנסות"
+          descriptionPlaceholder="לדוגמה: משכורת"
         />
       </motion.div>
+
+      <SuggestedRowsModal
+        isOpen={isSuggestionModalOpen}
+        rows={suggestedRows}
+        isLoading={isSavingTemplates}
+        onClose={handleCloseSuggestionModal}
+        onConfirm={handleSaveSuggestedRows}
+        title="הכנסות מוצעות להוספה"
+        subtitle="בחרו קטגוריה והזינו סכום עבור ההכנסות הרלוונטיות. שורות ללא סכום או קטגוריה לא יתווספו."
+        descriptionHeader="תיאור ההכנסה"
+        showCategoryColumn
+        categories={incomeCategories}
+        showInstallments={false}
+        showBiMonthly={false}
+      />
 
       <AdvancedModeModal
         isOpen={advancedModeForRowId !== null}

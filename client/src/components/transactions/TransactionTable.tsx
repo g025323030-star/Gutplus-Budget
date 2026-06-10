@@ -52,6 +52,8 @@ interface TransactionTableProps {
   onAfterAdvancedModeSave?: () => void;
   onFillTemplates?: () => void;
   showTemplatesButton?: boolean;
+  title?: string;
+  descriptionPlaceholder?: string;
 }
 
 export default function TransactionTable({
@@ -70,6 +72,8 @@ export default function TransactionTable({
   onAfterAdvancedModeSave,
   onFillTemplates,
   showTemplatesButton = false,
+  title = 'רשימת הוצאות',
+  descriptionPlaceholder = 'לדוגמה: סופר',
 }: TransactionTableProps) {
   const rowsRef = useRef<DraftRow[]>(rows);
   const pendingResave = useRef<Record<string, boolean>>({});
@@ -274,6 +278,9 @@ export default function TransactionTable({
       localId,
       serverId: null,
       installmentsTotal: null,
+      isRecurring: false,
+      recurringFrequency: null,
+      recurringEndDate: null,
       description: '',
       categoryId: null,
       amount: '',
@@ -304,10 +311,10 @@ export default function TransactionTable({
     <div className="bg-surface rounded-2xl shadow-sm border border-slate-100 p-6 flex flex-col h-full">
       <div className="flex items-center justify-between gap-3 mb-6">
         <div className="flex items-center gap-2">
-          <span className="text-xl" aria-hidden>
+          {/* <span className="text-xl" aria-hidden>
             💰
-          </span>
-          <h2 className="heading-3">רשימת הוצאות</h2>
+          </span> */}
+          <h2 className="heading-3">{title}</h2>
         </div>
         <div className="flex items-center gap-2">
           {showTemplatesButton && onFillTemplates && (
@@ -403,6 +410,7 @@ export default function TransactionTable({
               key={row.localId}
               row={row}
               categories={categories}
+              descriptionPlaceholder={descriptionPlaceholder}
               monthConstraint={monthConstraint}
               yearConstraint={yearConstraint}
               autoFocus={newRowFocus.current === row.localId}

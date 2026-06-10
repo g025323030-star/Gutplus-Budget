@@ -1,6 +1,8 @@
-import React, { useState, useEffect } from 'react';
-import { X, Trash2, Sparkles } from 'lucide-react';
+import React, { useState, useEffect, useMemo } from 'react';
+import { X, Trash2, Sparkles, Settings2 } from 'lucide-react';
 import type { DraftRow } from '../transactions/types';
+import AdvancedModeModal from '../transactions/AdvancedModeModal';
+import type { AdvancedModeResult } from '../transactions/AdvancedModeModal';
 
 interface SuggestedRowsModalProps {
   isOpen: boolean;
@@ -18,16 +20,26 @@ export const SuggestedRowsModal: React.FC<SuggestedRowsModalProps> = ({
   onConfirm,
 }) => {
   const [localRows, setLocalRows] = useState<DraftRow[]>([]);
+  
+  // ניהול המצב של השורה שנמצאת כרגע בעריכה מתקדמת (לפי אינדקס)
+  const [editingRowIndex, setEditingRowIndex] = useState<number | null>(null);
 
   useEffect(() => {
     if (isOpen) {
       setLocalRows(rows);
+      setEditingRowIndex(null); // איפוס במקרה של פתיחה מחדש
     }
   }, [isOpen, rows]);
 
+  // שליפת הנתונים של השורה שנמצאת בעריכה מתקדמת כרגע
+  const activeEditingRow = useMemo(() => {
+    if (editingRowIndex === null) return null;
+    return localRows[editingRowIndex] || null;
+  }, [editingRowIndex, localRows]);
+
   if (!isOpen) return null;
 
-  // פונקציה גנרית המאפשרת לעדכן כל סוג ערך (string, number או null)
+  // פונקציה גנרית לעדכון שדות
   const handleFieldChange = (index: number, field: keyof DraftRow, value: any) => {
     setLocalRows((prev) =>
       prev.map((row, i) => (i === index ? { ...row, [field]: value } : row))
@@ -36,6 +48,58 @@ export const SuggestedRowsModal: React.FC<SuggestedRowsModalProps> = ({
 
   const handleRemoveRow = (index: number) => {
     setLocalRows((prev) => prev.filter((_, i) => i !== index));
+    // אם השורה שנמחקה היא זו שנערכה, נסגור את תפריט העריכה
+    if (editingRowIndex === index) setEditingRowIndex(null);
+  };
+
+  // טיפול באישור השינויים מה-AdvancedModeModal
+  const handleAdvancedModeConfirm = (result: AdvancedModeResult) => {
+    if (editingRowIndex === null) return;
+
+    setLocalRows((prev) =>
+      prev.map((row, i) => {
+        if (i !== editingRowIndex) return row;
+
+        if (result.mode === 'installments') {
+          return {
+            ...row,
+            mode: 'installments',
+            installmentsTotal: result.installmentsTotal,
+            endDate: null,
+            isBiMonthly: false,
+          };
+        }
+        if (result.mode === 'recurring') {
+          return {
+            ...row,
+            mode: 'recurring',
+            installmentsTotal: null,
+            endDate: result.endDate,
+            isBiMonthly: result.isBiMonthly,
+          };
+        }
+        return {
+          ...row,
+          mode: 'none',
+          installmentsTotal: null,
+          endDate: null,
+          isBiMonthly: false,
+        };
+      })
+    );
+
+    setEditingRowIndex(null);
+  };
+
+  // פונקציית עזר להצגת טקסט אינדיקטיבי על כפתור ההגדרות המתקדמות
+  const getAdvancedButtonLabel = (row: DraftRow) => {
+    if (row.mode === 'installments' && row.installmentsTotal) {
+      return `${row.installmentsTotal} תשלומים`;
+    }
+    if (row.mode === 'recurring') {
+      return row.isBiMonthly ? 'דו-חודשי' : 'מחזורי';
+    }
+    return 'רגיל';
   };
 
   return (
@@ -66,15 +130,15 @@ export const SuggestedRowsModal: React.FC<SuggestedRowsModalProps> = ({
           </button>
         </header>
 
-        {/* תוכן השורות (רספונסיבי) */}
+        {/* תוכן השורות */}
         <main className="flex-1 p-6 md:p-8 overflow-y-auto space-y-4 bg-background/30">
           
-          {/* כותרת הטבלה למסכי דסקטופ */}
-          <div className="hidden md:grid grid-cols-[2fr_1.1fr_1.1fr_0.8fr_auto] gap-4 px-4 pb-2 border-b border-slate-100 label-text text-slate-400 font-bold">
+          {/* כותרת הטבלה לדסקטופ */}
+          <div className="hidden md:grid grid-cols-[2fr_1.1fr_1.1fr_1fr_auto] gap-4 px-4 pb-2 border-b border-slate-100 label-text text-slate-400 font-bold">
             <div>תיאור ההוצאה</div>
             <div>סכום (₪)</div>
             <div>תאריך</div>
-            <div className="text-center">תשלומים</div> 
+            <div className="text-center">סוג הגדרה</div> 
             <div className="w-10"></div>
           </div>
 
@@ -87,7 +151,7 @@ export const SuggestedRowsModal: React.FC<SuggestedRowsModalProps> = ({
               localRows.map((row, index) => (
                 <div
                   key={row.localId}
-                  className="bg-surface rounded-xl border border-slate-100/80 p-4 md:p-3 md:grid md:grid-cols-[2fr_1.1fr_1.1fr_0.8fr_auto] md:gap-4 md:items-center shadow-sm hover:shadow-md transition-all duration-300 flex flex-col gap-3"
+                  className="bg-surface rounded-xl border border-slate-100/80 p-4 md:p-3 md:grid md:grid-cols-[2fr_1.1fr_1.1fr_1fr_auto] md:gap-4 md:items-center shadow-sm hover:shadow-md transition-all duration-300 flex flex-col gap-3"
                 >
                   {/* תיאור ההוצאה */}
                   <div className="font-bold text-primary body-text md:font-medium truncate md:px-1">
@@ -124,23 +188,22 @@ export const SuggestedRowsModal: React.FC<SuggestedRowsModalProps> = ({
                     />
                   </div>
 
-                  {/* שדה מספר תשלומים */}
+                  {/* כפתור הגדרות מתקדמות (תשלומים/מחזורי) */}
                   <div className="flex flex-col gap-1.5">
-                    <label htmlFor={`installments-${index}`} className="label-text text-xs md:hidden">מספר תשלומים</label>
-                    <input
-                      id={`installments-${index}`}
-                      type="number"
-                      min="1"
-                      max="36"
-                      placeholder="1"
+                    <label className="label-text text-xs md:hidden">הגדרות מתקדמות</label>
+                    <button
+                      type="button"
                       disabled={isLoading}
-                      value={row.installmentsTotal || ''}
-                      onChange={(e) => {
-                        const val = e.target.value ? parseInt(e.target.value, 10) : null;
-                        handleFieldChange(index, 'installmentsTotal', val);
-                      }}
-                      className="w-full bg-background border border-slate-200/80 rounded-xl px-3 py-2 label-text text-primary text-center focus:outline-none focus:border-accent focus:ring-1 focus:ring-accent transition-all duration-300 disabled:opacity-60"
-                    />
+                      onClick={() => setEditingRowIndex(index)}
+                      className={`w-full flex items-center justify-center gap-2 px-3 py-2 rounded-xl border text-sm font-medium transition-all duration-300 ${
+                        row.mode !== 'none'
+                          ? 'border-accent/30 bg-accent/5 text-accent hover:bg-accent/10'
+                          : 'border-slate-200/80 bg-background text-slate-600 hover:border-slate-300 hover:bg-slate-50'
+                      }`}
+                    >
+                      <Settings2 size={15} strokeWidth={1.8} />
+                      <span>{getAdvancedButtonLabel(row)}</span>
+                    </button>
                   </div>
 
                   {/* כפתור מחיקת שורה בודדת */}
@@ -195,6 +258,18 @@ export const SuggestedRowsModal: React.FC<SuggestedRowsModalProps> = ({
         </footer>
 
       </div>
+
+      {/* אינסטנס יחיד של המודאל המתקדם מחוץ ללופ - מונע בעיות ביצועים ועובד מול השורה האקטיבית */}
+      <AdvancedModeModal
+        isOpen={editingRowIndex !== null}
+        initialMode={activeEditingRow?.mode ?? 'none'}
+        initialInstallmentsTotal={activeEditingRow?.installmentsTotal ?? null}
+        initialEndDate={activeEditingRow?.endDate ?? null}
+        initialIsBiMonthly={activeEditingRow?.isBiMonthly ?? false}
+        totalAmount={activeEditingRow?.amount ?? ''}
+        onClose={() => setEditingRowIndex(null)}
+        onConfirm={handleAdvancedModeConfirm}
+      />
     </div>
   );
 };

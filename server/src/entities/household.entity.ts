@@ -29,6 +29,9 @@ export class Household {
   @Column({ name: 'expense_templates_initialized', type: 'boolean', default: false })
   expenseTemplatesInitialized!: boolean;
 
+  @Column({ name: 'income_templates_initialized', type: 'boolean', default: false })
+  incomeTemplatesInitialized!: boolean;
+
   @CreateDateColumn({ name: 'created_at', type: 'timestamptz' })
   createdAt!: Date;
 

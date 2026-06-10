@@ -2,6 +2,7 @@ import { randomUUID } from 'crypto';
 import { EntityManager, Repository } from 'typeorm';
 import {
   CategoryFrequency,
+  CategoryType,
   TransactionFrequency,
 } from '@gutplus/shared';
 import type {
@@ -101,11 +102,13 @@ export class TransactionService {
   private transactionRepository: Repository<Transaction>;
   private recurringRepository: Repository<RecurringTransaction>;
   private householdRepository: Repository<Household>;
+  private categoryRepository: Repository<Category>;
 
   constructor() {
     this.transactionRepository = AppDataSource.getRepository(Transaction);
     this.recurringRepository = AppDataSource.getRepository(RecurringTransaction);
     this.householdRepository = AppDataSource.getRepository(Household);
+    this.categoryRepository = AppDataSource.getRepository(Category);
   }
 
   /**
@@ -118,6 +121,38 @@ export class TransactionService {
       { id: householdId, expenseTemplatesInitialized: false },
       { expenseTemplatesInitialized: true },
     );
+  }
+
+  /** Income counterpart of {@link markExpenseTemplatesInitialized}. */
+  private async markIncomeTemplatesInitialized(householdId: string): Promise<void> {
+    await this.householdRepository.update(
+      { id: householdId, incomeTemplatesInitialized: false },
+      { incomeTemplatesInitialized: true },
+    );
+  }
+
+  /**
+   * Flips the per-type "templates initialized" flag after a transaction is
+   * created. A transaction has no type of its own — its type comes from its
+   * linked category. We look up the category type and mark income vs. expense
+   * accordingly; when there is no category we fall back to expense to preserve
+   * the previous unconditional behavior.
+   */
+  private async markTemplatesInitialized(
+    householdId: string,
+    categoryId?: string,
+  ): Promise<void> {
+    if (categoryId) {
+      const category = await this.categoryRepository.findOne({
+        where: { id: categoryId },
+        select: { id: true, type: true },
+      });
+      if (category?.type === CategoryType.INCOME) {
+        await this.markIncomeTemplatesInitialized(householdId);
+        return;
+      }
+    }
+    await this.markExpenseTemplatesInitialized(householdId);
   }
 
   async create(
@@ -138,24 +173,24 @@ export class TransactionService {
 
     if (isPermanentRecurring) {
       const created = await this.createPermanentRecurring(dto);
-      await this.markExpenseTemplatesInitialized(dto.householdId);
+      await this.markTemplatesInitialized(dto.householdId, dto.categoryId);
       return { kind: 'recurring', data: created };
     }
 
     if (isBoundedRecurring) {
       const created = await this.createBoundedRecurring(dto);
-      await this.markExpenseTemplatesInitialized(dto.householdId);
+      await this.markTemplatesInitialized(dto.householdId, dto.categoryId);
       return { kind: 'transactions', data: created };
     }
 
     if (hasInstallments) {
       const created = await this.createInstallments(dto);
-      await this.markExpenseTemplatesInitialized(dto.householdId);
+      await this.markTemplatesInitialized(dto.householdId, dto.categoryId);
       return { kind: 'transactions', data: created };
     }
 
     const created = await this.createSingleTransaction(dto);
-    await this.markExpenseTemplatesInitialized(dto.householdId);
+    await this.markTemplatesInitialized(dto.householdId, dto.categoryId);
     return { kind: 'transactions', data: [created] };
   }
 

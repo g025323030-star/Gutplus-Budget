@@ -23,6 +23,7 @@ interface AdvancedModeModalProps {
   showBiMonthly?: boolean;
 }
 
+
 type Tab = 'installments' | 'recurring';
 
 export default function AdvancedModeModal({
