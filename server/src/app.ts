@@ -12,7 +12,7 @@ import {
   categoryRoutes,
   familyMemberRoutes,
   budgetPlanRoutes,
-  transactionRoutes,
+  budgetItemRoutes,
 } from './routes';
 import { errorHandler } from './middlewares';
 import { rollingTokenMiddleware } from './middlewares/referenceToken';
@@ -58,7 +58,7 @@ app.use(`${API_PREFIX}/${ENDPOINTS.accounts.base}`, authGuard, accountRoutes);
 app.use(`${API_PREFIX}/${ENDPOINTS.categories.base}`, authGuard, categoryRoutes);
 app.use(`${API_PREFIX}/${ENDPOINTS.familyMembers.base}`, authGuard, familyMemberRoutes);
 app.use(`${API_PREFIX}/${ENDPOINTS.budgetPlans.base}`, authGuard, budgetPlanRoutes);
-app.use(`${API_PREFIX}/${ENDPOINTS.transactions.base}`, authGuard, transactionRoutes);
+app.use(`${API_PREFIX}/${ENDPOINTS.budgetItems.base}`, authGuard, budgetItemRoutes);
 
 // Health check
 app.get('/health', async (req, res) => {

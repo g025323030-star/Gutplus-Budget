@@ -7,7 +7,7 @@ import CategoryCombobox from './CategoryCombobox';
 import SaveIndicator from './SaveIndicator';
 import type { DraftRow } from './types';
 
-interface TransactionRowProps {
+interface BudgetItemRowProps {
   row: DraftRow;
   categories: Category[];
   descriptionPlaceholder?: string;
@@ -83,7 +83,7 @@ const validateField = (
   }
 };
 
-export default function TransactionRow({
+export default function BudgetItemRow({
   row,
   categories,
   descriptionPlaceholder = 'לדוגמה: סופר',
@@ -98,7 +98,7 @@ export default function TransactionRow({
   onRetry,
   onAddCategoryRequest,
   onAdvancedModeRequest,
-}: TransactionRowProps) {
+}: BudgetItemRowProps) {
   const rowRef = useRef<HTMLDivElement | null>(null);
   const descriptionRef = useRef<HTMLInputElement | null>(null);
   const [touched, setTouched] = useState<Record<FieldKey, boolean>>({
@@ -270,14 +270,14 @@ export default function TransactionRow({
               onClick={onAdvancedModeRequest}
               aria-label={
                 row.mode === 'recurring'
-                  ? 'עסקה קבועה'
+                  ? 'תחום קבוע'
                   : row.mode === 'installments' && row.installmentsTotal
                     ? `${row.installmentsTotal} תשלומים`
                     : 'הגדר מצב מתקדם'
               }
               title={
                 row.mode === 'recurring'
-                  ? 'עסקה קבועה'
+                  ? 'תחום קבוע'
                   : row.mode === 'installments' && row.installmentsTotal
                     ? `${row.installmentsTotal} תשלומים`
                     : 'הגדר מצב מתקדם'

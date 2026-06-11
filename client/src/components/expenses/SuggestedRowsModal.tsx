@@ -1,8 +1,9 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { X, Trash2, Sparkles, Settings2 } from 'lucide-react';
-import type { DraftRow } from '../transactions/types';
-import AdvancedModeModal from '../transactions/AdvancedModeModal';
-import type { AdvancedModeResult } from '../transactions/AdvancedModeModal';
+import type { Category } from '@gutplus/shared';
+import type { DraftRow } from '../budget-items/types';
+import AdvancedModeModal from '../budget-items/AdvancedModeModal';
+import type { AdvancedModeResult } from '../budget-items/AdvancedModeModal';
 
 interface SuggestedRowsModalProps {
   isOpen: boolean;
@@ -10,6 +11,13 @@ interface SuggestedRowsModalProps {
   isLoading?: boolean;
   onClose: () => void;
   onConfirm: (rows: DraftRow[]) => Promise<void> | void;
+  title?: string;
+  subtitle?: string;
+  descriptionHeader?: string;
+  showCategoryColumn?: boolean;
+  showInstallments?: boolean;
+  showBiMonthly?: boolean;
+  categories?: Category[];
 }
 
 export const SuggestedRowsModal: React.FC<SuggestedRowsModalProps> = ({
@@ -18,9 +26,16 @@ export const SuggestedRowsModal: React.FC<SuggestedRowsModalProps> = ({
   isLoading = false,
   onClose,
   onConfirm,
+  title = 'הוצאות מוצעות להוספה',
+  subtitle = 'הזינו סכום עבור ההוצאות הרלוונטיות. שורות שיישארו ללא סכום לא יתווספו.',
+  descriptionHeader = 'תיאור ההוצאה',
+  showCategoryColumn = false,
+  showInstallments = true,
+  showBiMonthly = true,
+  categories = [],
 }) => {
   const [localRows, setLocalRows] = useState<DraftRow[]>([]);
-  
+
   // ניהול המצב של השורה שנמצאת כרגע בעריכה מתקדמת (לפי אינדקס)
   const [editingRowIndex, setEditingRowIndex] = useState<number | null>(null);
 
@@ -39,8 +54,13 @@ export const SuggestedRowsModal: React.FC<SuggestedRowsModalProps> = ({
 
   if (!isOpen) return null;
 
+  // עמודות דינמיות: 2fr (תיאור) + [קטגוריה אם פעיל] + 1.1fr (סכום) + 1.1fr (תאריך) + 1fr (הגדרות) + auto (מחיקה)
+  const gridCols = showCategoryColumn
+    ? 'md:grid-cols-[2fr_1.5fr_1.1fr_1.1fr_1fr_auto]'
+    : 'md:grid-cols-[2fr_1.1fr_1.1fr_1fr_auto]';
+
   // פונקציה גנרית לעדכון שדות
-  const handleFieldChange = (index: number, field: keyof DraftRow, value: any) => {
+  const handleFieldChange = (index: number, field: keyof DraftRow, value: unknown) => {
     setLocalRows((prev) =>
       prev.map((row, i) => (i === index ? { ...row, [field]: value } : row))
     );
@@ -105,7 +125,7 @@ export const SuggestedRowsModal: React.FC<SuggestedRowsModalProps> = ({
   return (
     <div className="fixed inset-0 bg-slate-950/50 backdrop-blur-sm z-50 flex items-center justify-center p-4 transition-all duration-300 animate-fadeIn">
       <div className="bg-surface rounded-2xl shadow-2xl w-full max-w-4xl max-h-[90vh] flex flex-col overflow-hidden animate-slideUp">
-        
+
         {/* כותרת המודאל */}
         <header className="p-6 md:p-8 border-b border-slate-100 flex justify-between items-center bg-surface">
           <div className="flex items-center gap-3">
@@ -113,9 +133,9 @@ export const SuggestedRowsModal: React.FC<SuggestedRowsModalProps> = ({
               <Sparkles size={20} strokeWidth={1.5} />
             </div>
             <div>
-              <h2 className="heading-2">הוצאות מוצעות להוספה</h2>
+              <h2 className="heading-2">{title}</h2>
               <p className="body-text-sm text-slate-400 mt-0.5">
-                הזינו סכום עבור ההוצאות הרלוונטיות. שורות שיישארו ללא סכום לא יתווספו.
+                {subtitle}
               </p>
             </div>
           </div>
@@ -132,13 +152,14 @@ export const SuggestedRowsModal: React.FC<SuggestedRowsModalProps> = ({
 
         {/* תוכן השורות */}
         <main className="flex-1 p-6 md:p-8 overflow-y-auto space-y-4 bg-background/30">
-          
+
           {/* כותרת הטבלה לדסקטופ */}
-          <div className="hidden md:grid grid-cols-[2fr_1.1fr_1.1fr_1fr_auto] gap-4 px-4 pb-2 border-b border-slate-100 label-text text-slate-400 font-bold">
-            <div>תיאור ההוצאה</div>
+          <div className={`hidden md:grid ${gridCols} gap-4 px-4 pb-2 border-b border-slate-100 label-text text-slate-400 font-bold`}>
+            <div>{descriptionHeader}</div>
+            {showCategoryColumn && <div>קטגוריה</div>}
             <div>סכום (₪)</div>
             <div>תאריך</div>
-            <div className="text-center">סוג הגדרה</div> 
+            <div className="text-center">סוג הגדרה</div>
             <div className="w-10"></div>
           </div>
 
@@ -151,12 +172,33 @@ export const SuggestedRowsModal: React.FC<SuggestedRowsModalProps> = ({
               localRows.map((row, index) => (
                 <div
                   key={row.localId}
-                  className="bg-surface rounded-xl border border-slate-100/80 p-4 md:p-3 md:grid md:grid-cols-[2fr_1.1fr_1.1fr_1fr_auto] md:gap-4 md:items-center shadow-sm hover:shadow-md transition-all duration-300 flex flex-col gap-3"
+                  className={`bg-surface rounded-xl border border-slate-100/80 p-4 md:p-3 md:grid ${gridCols} md:gap-4 md:items-center shadow-sm hover:shadow-md transition-all duration-300 flex flex-col gap-3`}
                 >
-                  {/* תיאור ההוצאה */}
+                  {/* תיאור */}
                   <div className="font-bold text-primary body-text md:font-medium truncate md:px-1">
                     {row.description}
                   </div>
+
+                  {/* עמודת קטגוריה (אופציונלי) */}
+                  {showCategoryColumn && (
+                    <div className="flex flex-col gap-1.5">
+                      <label htmlFor={`cat-${index}`} className="label-text text-xs md:hidden">קטגוריה</label>
+                      <select
+                        id={`cat-${index}`}
+                        disabled={isLoading}
+                        value={row.categoryId ?? ''}
+                        onChange={(e) => handleFieldChange(index, 'categoryId', e.target.value || null)}
+                        className="w-full bg-background border border-slate-200/80 rounded-xl px-3 py-2 label-text text-primary focus:outline-none focus:border-accent focus:ring-1 focus:ring-accent transition-all duration-300 disabled:opacity-60 appearance-none cursor-pointer"
+                      >
+                        <option value="">בחר קטגוריה</option>
+                        {categories.map((c) => (
+                          <option key={c.id} value={c.id}>
+                            {c.name}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  )}
 
                   {/* שדה סכום */}
                   <div className="flex flex-col gap-1.5">
@@ -216,7 +258,7 @@ export const SuggestedRowsModal: React.FC<SuggestedRowsModalProps> = ({
                       title="הסר מרשימת ההצעות"
                     >
                       <Trash2 size={16} strokeWidth={1.5} />
-                      <span className="body-text-sm font-bold text-red-500 md:hidden">הסר הוצאה</span>
+                      <span className="body-text-sm font-bold text-red-500 md:hidden">הסר</span>
                     </button>
                   </div>
 
@@ -269,6 +311,8 @@ export const SuggestedRowsModal: React.FC<SuggestedRowsModalProps> = ({
         totalAmount={activeEditingRow?.amount ?? ''}
         onClose={() => setEditingRowIndex(null)}
         onConfirm={handleAdvancedModeConfirm}
+        showInstallments={showInstallments}
+        showBiMonthly={showBiMonthly}
       />
     </div>
   );

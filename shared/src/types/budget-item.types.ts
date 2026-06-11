@@ -1,6 +1,6 @@
 import { CategoryFrequency } from '../enums';
 
-export interface Transaction {
+export interface BudgetItem {
   id: string;
   amount: string;
   date: string;
@@ -10,6 +10,7 @@ export interface Transaction {
   installmentsTotal: number | null;
   installmentIndex: number | null;
   installmentGroupId: string | null;
+  endDate: string | null;
   householdId: string;
   categoryId: string | null;
   accountId: string | null;

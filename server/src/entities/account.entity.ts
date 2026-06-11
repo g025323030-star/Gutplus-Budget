@@ -10,8 +10,8 @@ import {
   UpdateDateColumn,
 } from 'typeorm';
 import { AccountType } from '@gutplus/shared';
+import { BudgetItem } from './budget-item.entity';
 import { Household } from './household.entity';
-import { Transaction } from './transaction.entity';
 
 export { AccountType };
 
@@ -72,8 +72,8 @@ export class Account {
   @JoinColumn({ name: 'household_id' })
   household!: Household;
 
-  @OneToMany(() => Transaction, transaction => transaction.account)
-  transactions!: Transaction[];
+  @OneToMany(() => BudgetItem, budgetItem => budgetItem.account)
+  budgetItems!: BudgetItem[];
 
   @CreateDateColumn({ name: 'created_at', type: 'timestamptz' })
   createdAt!: Date;

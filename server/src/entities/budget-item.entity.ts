@@ -13,8 +13,8 @@ import { Account } from './account.entity';
 import { Category } from './category.entity';
 import { Household } from './household.entity';
 
-@Entity({ name: 'transaction' })
-export class Transaction {
+@Entity({ name: 'budget_item' })
+export class BudgetItem {
   @PrimaryGeneratedColumn('uuid')
   id!: string;
 
@@ -26,7 +26,7 @@ export class Transaction {
   })
   amount!: string;
 
-  @Index('IDX_transaction_date')
+  @Index('IDX_budget_item_date')
   @Column({ name: 'date', type: 'timestamptz' })
   date!: Date;
 
@@ -51,19 +51,22 @@ export class Transaction {
   @Column({ name: 'installment_index', type: 'int', nullable: true })
   installmentIndex!: number | null;
 
-  @Index('IDX_transaction_installment_group')
+  @Index('IDX_budget_item_installment_group')
   @Column({ name: 'installment_group_id', type: 'uuid', nullable: true })
   installmentGroupId!: string | null;
 
-  @Index('IDX_transaction_household')
-  @ManyToOne(() => Household, household => household.transactions, {
+  @Column({ name: 'end_date', type: 'timestamptz', nullable: true })
+  endDate!: Date | null;
+
+  @Index('IDX_budget_item_household')
+  @ManyToOne(() => Household, household => household.budgetItems, {
     onDelete: 'CASCADE',
     nullable: false,
   })
   @JoinColumn({ name: 'household_id' })
   household!: Household;
 
-  @Index('IDX_transaction_category')
+  @Index('IDX_budget_item_category')
   @ManyToOne(() => Category, {
     onDelete: 'SET NULL',
     nullable: true,
@@ -71,8 +74,8 @@ export class Transaction {
   @JoinColumn({ name: 'category_id' })
   category!: Category | null;
 
-  @Index('IDX_transaction_account')
-  @ManyToOne(() => Account, account => account.transactions, {
+  @Index('IDX_budget_item_account')
+  @ManyToOne(() => Account, account => account.budgetItems, {
     onDelete: 'SET NULL',
     nullable: true,
   })

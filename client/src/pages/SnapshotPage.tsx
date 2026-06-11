@@ -1,9 +1,9 @@
 import { useEffect, useMemo, useState } from 'react';
 import { AlertCircle, LayoutDashboard } from 'lucide-react';
 import { CategoryFrequency, CategoryType } from '@gutplus/shared';
-import type { BudgetPlan, Category, Transaction } from '@gutplus/shared';
+import type { BudgetItem, BudgetPlan, Category } from '@gutplus/shared';
 import { ICON_STROKE } from '../constants/ui';
-import { getTransactions } from '../services/transactions.service';
+import { getBudgetItems } from '../services/budget-items.service';
 import { getCategories } from '../services/categories.service';
 import { getBudgetPlans } from '../services/budget-plans.service';
 import PeriodToggle from '../components/snapshot/PeriodToggle';
@@ -51,11 +51,11 @@ function ErrorBlock({ message }: ErrorBlockProps) {
 }
 
 const filterToPeriod = (
-  transactions: Transaction[],
+  transactions: BudgetItem[],
   mode: PeriodMode,
   month: number,
   year: number,
-): Transaction[] =>
+): BudgetItem[] =>
   transactions.filter((tx) => {
     const txDate = new Date(tx.date);
     if (txDate.getFullYear() !== year) return false;
@@ -69,7 +69,7 @@ export default function SnapshotPage() {
   const [selectedMonth, setSelectedMonth] = useState<number>(now.getMonth() + 1);
   const [selectedYear, setSelectedYear] = useState<number>(now.getFullYear());
 
-  const [transactions, setTransactions] = useState<Transaction[]>([]);
+  const [transactions, setTransactions] = useState<BudgetItem[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
   const [budgetPlans, setBudgetPlans] = useState<BudgetPlan[]>([]);
 
@@ -87,7 +87,7 @@ export default function SnapshotPage() {
       const queryYear = selectedYear;
 
       const [txResult, catsResult, plansResult] = await Promise.allSettled([
-        getTransactions(queryMonth, queryYear),
+        getBudgetItems(queryMonth, queryYear),
         getCategories(),
         getBudgetPlans(queryMonth, queryYear),
       ]);
@@ -107,7 +107,7 @@ export default function SnapshotPage() {
 
       if (txResult.status === 'fulfilled') {
         const realTx = txResult.value.filter(
-          (item): item is Transaction =>
+          (item): item is BudgetItem =>
             (item as { isProjection?: boolean }).isProjection !== true,
         );
         setTransactions(realTx);

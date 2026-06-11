@@ -2,17 +2,17 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { motion } from 'framer-motion';
 import { AlertCircle, Calendar, ChevronDown, TrendingUp } from 'lucide-react';
 import { CategoryFrequency, CategoryType } from '@gutplus/shared';
-import type { Category, TransactionListItem } from '@gutplus/shared';
+import type { Category, BudgetItemListItem } from '@gutplus/shared';
 import { ICON_STROKE } from '../constants/ui';
 import { useCurrentUser } from '../hooks/useCurrentUser';
-import { getTransactions, createTransaction } from '../services/transactions.service';
+import { getBudgetItems, createBudgetItem } from '../services/budget-items.service';
 import { getCategories } from '../services/categories.service';
-import TransactionTable from '../components/transactions/TransactionTable';
-import AdvancedModeModal from '../components/transactions/AdvancedModeModal';
-import type { AdvancedModeResult } from '../components/transactions/AdvancedModeModal';
-import CategoryFormModal from '../components/transactions/CategoryFormModal';
-import type { DraftRow } from '../components/transactions/types';
-import { snapshotOf } from '../components/transactions/types';
+import BudgetItemTable from '../components/budget-items/BudgetItemTable';
+import AdvancedModeModal from '../components/budget-items/AdvancedModeModal';
+import type { AdvancedModeResult } from '../components/budget-items/AdvancedModeModal';
+import CategoryFormModal from '../components/budget-items/CategoryFormModal';
+import type { DraftRow } from '../components/budget-items/types';
+import { snapshotOf } from '../components/budget-items/types';
 import { SuggestedRowsModal } from '../components/expenses/SuggestedRowsModal';
 
 const HEBREW_MONTHS = [
@@ -55,12 +55,10 @@ const newLocalId = (): string =>
 const normDesc = (s: string): string =>
   s.trim().replace(/\s+/g, ' ').toLowerCase();
 
-const isProjectionItem = (
-  item: TransactionListItem,
-): item is Extract<TransactionListItem, { isProjection: true }> =>
+const isProjectionItem = (item: BudgetItemListItem): boolean =>
   (item as { isProjection?: boolean }).isProjection === true;
 
-const toDraftRow = (item: TransactionListItem): DraftRow | null => {
+const toDraftRow = (item: BudgetItemListItem): DraftRow | null => {
   if (isProjectionItem(item)) return null;
   const amountStr =
     typeof item.amount === 'string' ? item.amount : String(item.amount);
@@ -150,7 +148,7 @@ export default function IncomePage() {
       setIsLoading(true);
       setError(null);
       const [txResult, catsResult] = await Promise.allSettled([
-        getTransactions(selectedMonth, selectedYear),
+        getBudgetItems(selectedMonth, selectedYear),
         getCategories(),
       ]);
       if (cancelled) return;
@@ -277,9 +275,9 @@ export default function IncomePage() {
           installmentsTotal: row.installmentsTotal ?? undefined,
         };
 
-        const result = await createTransaction(payload);
+        const result = await createBudgetItem(payload);
 
-        if (result && result.kind === 'transactions' && result.data?.[0]) {
+        if (result && result.kind === 'budgetItems' && result.data?.[0]) {
           const serverData = result.data[0];
 
           const savedRow: DraftRow = {
@@ -552,7 +550,7 @@ export default function IncomePage() {
       )}
 
       <motion.div variants={ITEM_VARIANTS}>
-        <TransactionTable
+        <BudgetItemTable
           rows={rows}
           categories={incomeCategories}
           householdId={householdId}

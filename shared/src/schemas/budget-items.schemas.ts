@@ -18,7 +18,7 @@ const dateInputSchema = z
     return value;
   });
 
-export const transactionEntitySchema = z.object({
+export const budgetItemEntitySchema = z.object({
   id: uuidSchema,
   amount: decimalStringSchema,
   date: isoDateStringSchema,
@@ -28,6 +28,7 @@ export const transactionEntitySchema = z.object({
   installmentsTotal: z.number().int().nullable(),
   installmentIndex: z.number().int().nullable(),
   installmentGroupId: uuidSchema.nullable(),
+  endDate: isoDateStringSchema.nullable(),
   householdId: uuidSchema,
   categoryId: uuidSchema.nullable(),
   accountId: uuidSchema.nullable(),
@@ -35,7 +36,7 @@ export const transactionEntitySchema = z.object({
   updatedAt: isoDateStringSchema,
 });
 
-const createTransactionBaseSchema = z.object({
+const createBudgetItemBaseSchema = z.object({
   amount: decimalStringSchema,
   date: dateInputSchema,
   description: z.string().min(1),
@@ -51,7 +52,7 @@ const createTransactionBaseSchema = z.object({
   recurringFrequency: z.nativeEnum(TransactionFrequency).optional(),
 });
 
-export const createTransactionSchema = createTransactionBaseSchema.superRefine(
+export const createBudgetItemSchema = createBudgetItemBaseSchema.superRefine(
   (value, ctx) => {
     const hasInstallments =
       value.installmentsTotal !== undefined && value.installmentsTotal !== null;
@@ -61,7 +62,7 @@ export const createTransactionSchema = createTransactionBaseSchema.superRefine(
     if (hasInstallments && value.isRecurring === true) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
-        message: 'A transaction cannot be both an installment plan and recurring',
+        message: 'A budget item cannot be both an installment plan and recurring',
         path: ['isRecurring'],
       });
     }
@@ -129,7 +130,7 @@ export const createTransactionSchema = createTransactionBaseSchema.superRefine(
   },
 );
 
-export const updateTransactionSchema = createTransactionBaseSchema.partial();
+export const updateBudgetItemSchema = createBudgetItemBaseSchema.partial();
 
-export type CreateTransactionInput = z.infer<typeof createTransactionSchema>;
-export type UpdateTransactionInput = z.infer<typeof updateTransactionSchema>;
+export type CreateBudgetItemInput = z.infer<typeof createBudgetItemSchema>;
+export type UpdateBudgetItemInput = z.infer<typeof updateBudgetItemSchema>;

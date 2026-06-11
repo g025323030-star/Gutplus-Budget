@@ -1,30 +1,25 @@
 import { randomUUID } from 'crypto';
 import { EntityManager, Repository } from 'typeorm';
 import {
-  CategoryFrequency,
   CategoryType,
   TransactionFrequency,
 } from '@gutplus/shared';
 import type {
-  RecurringTransaction as RecurringTransactionShared,
-  RecurringTransactionProjection,
-  Transaction as TransactionShared,
-  TransactionListItem,
+  BudgetItem as BudgetItemShared,
+  BudgetItemListItem,
 } from '@gutplus/shared';
 import { AppDataSource } from '../config/data-source';
 import { Account } from '../entities/account.entity';
+import { BudgetItem } from '../entities/budget-item.entity';
 import { Category } from '../entities/category.entity';
 import { Household } from '../entities/household.entity';
-import { RecurringTransaction } from '../entities/recurring-transaction.entity';
-import { Transaction } from '../entities/transaction.entity';
 import {
-  CreateTransactionDto,
-  UpdateTransactionDto,
-} from '../dto/transaction.dto';
+  CreateBudgetItemDto,
+  UpdateBudgetItemDto,
+} from '../dto/budget-item.dto';
 
-export type CreateTransactionServiceResult =
-  | { kind: 'recurring'; data: RecurringTransactionShared }
-  | { kind: 'transactions'; data: TransactionShared[] };
+export type CreateBudgetItemServiceResult =
+  | { kind: 'budgetItems'; data: BudgetItemShared[] };
 
 const daysInMonth = (year: number, monthIndex: number): number =>
   new Date(year, monthIndex + 1, 0).getDate();
@@ -59,7 +54,7 @@ const stepMonthsForFrequency = (frequency: TransactionFrequency): number => {
   }
 };
 
-const toTransactionShared = (row: Transaction): TransactionShared => ({
+const toBudgetItemShared = (row: BudgetItem): BudgetItemShared => ({
   id: row.id,
   amount: row.amount,
   date: row.date instanceof Date ? row.date.toISOString() : (row.date as unknown as string),
@@ -69,6 +64,9 @@ const toTransactionShared = (row: Transaction): TransactionShared => ({
   installmentsTotal: row.installmentsTotal,
   installmentIndex: row.installmentIndex,
   installmentGroupId: row.installmentGroupId,
+  endDate: row.endDate instanceof Date
+    ? row.endDate.toISOString()
+    : (row.endDate as unknown as string | null),
   householdId: row.household?.id ?? '',
   categoryId: row.category?.id ?? null,
   accountId: row.account?.id ?? null,
@@ -82,38 +80,20 @@ const toTransactionShared = (row: Transaction): TransactionShared => ({
       : (row.updatedAt as unknown as string),
 });
 
-const toRecurringShared = (
-  row: RecurringTransaction,
-): RecurringTransactionShared => ({
-  id: row.id,
-  householdId: row.household?.id ?? '',
-  categoryId: row.category?.id ?? '',
-  accountId: row.account?.id ?? '',
-  amount: Number(row.amount),
-  description: row.description,
-  dayOfMonth: row.dayOfMonth,
-  frequency: row.frequency,
-  startDate: row.startDate,
-  createdAt: row.createdAt,
-  updatedAt: row.updatedAt,
-});
-
-export class TransactionService {
-  private transactionRepository: Repository<Transaction>;
-  private recurringRepository: Repository<RecurringTransaction>;
+export class BudgetItemService {
+  private budgetItemRepository: Repository<BudgetItem>;
   private householdRepository: Repository<Household>;
   private categoryRepository: Repository<Category>;
 
   constructor() {
-    this.transactionRepository = AppDataSource.getRepository(Transaction);
-    this.recurringRepository = AppDataSource.getRepository(RecurringTransaction);
+    this.budgetItemRepository = AppDataSource.getRepository(BudgetItem);
     this.householdRepository = AppDataSource.getRepository(Household);
     this.categoryRepository = AppDataSource.getRepository(Category);
   }
 
   /**
    * Idempotently marks a household's expense templates as initialized after its
-   * first transaction is created. A single conditional UPDATE keeps this cheap:
+   * first budget item is created. A single conditional UPDATE keeps this cheap:
    * it only writes when the flag is still false.
    */
   private async markExpenseTemplatesInitialized(householdId: string): Promise<void> {
@@ -132,8 +112,8 @@ export class TransactionService {
   }
 
   /**
-   * Flips the per-type "templates initialized" flag after a transaction is
-   * created. A transaction has no type of its own — its type comes from its
+   * Flips the per-type "templates initialized" flag after a budget item is
+   * created. A budget item has no type of its own — its type comes from its
    * linked category. We look up the category type and mark income vs. expense
    * accordingly; when there is no category we fall back to expense to preserve
    * the previous unconditional behavior.
@@ -156,8 +136,8 @@ export class TransactionService {
   }
 
   async create(
-    dto: CreateTransactionDto,
-  ): Promise<CreateTransactionServiceResult> {
+    dto: CreateBudgetItemDto,
+  ): Promise<CreateBudgetItemServiceResult> {
     const hasInstallments =
       dto.installmentsTotal !== undefined &&
       dto.installmentsTotal !== null &&
@@ -165,71 +145,31 @@ export class TransactionService {
       dto.installmentIndex !== undefined &&
       dto.installmentIndex !== null;
 
-    const isPermanentRecurring =
-      dto.isRecurring === true && dto.endDate === undefined;
-
     const isBoundedRecurring =
       dto.isRecurring === true && dto.endDate !== undefined;
-
-    if (isPermanentRecurring) {
-      const created = await this.createPermanentRecurring(dto);
-      await this.markTemplatesInitialized(dto.householdId, dto.categoryId);
-      return { kind: 'recurring', data: created };
-    }
 
     if (isBoundedRecurring) {
       const created = await this.createBoundedRecurring(dto);
       await this.markTemplatesInitialized(dto.householdId, dto.categoryId);
-      return { kind: 'transactions', data: created };
+      return { kind: 'budgetItems', data: created };
     }
 
     if (hasInstallments) {
       const created = await this.createInstallments(dto);
       await this.markTemplatesInitialized(dto.householdId, dto.categoryId);
-      return { kind: 'transactions', data: created };
+      return { kind: 'budgetItems', data: created };
     }
 
-    const created = await this.createSingleTransaction(dto);
+    const created = await this.createSingleBudgetItem(dto);
     await this.markTemplatesInitialized(dto.householdId, dto.categoryId);
-    return { kind: 'transactions', data: [created] };
-  }
-
-  private async createPermanentRecurring(
-    dto: CreateTransactionDto,
-  ): Promise<RecurringTransactionShared> {
-    if (!dto.categoryId) {
-      throw new Error('categoryId is required for recurring transactions');
-    }
-    if (!dto.recurringFrequency) {
-      throw new Error('recurringFrequency is required for recurring transactions');
-    }
-
-    await this.assertReferencesExist(this.recurringRepository.manager, {
-      householdId: dto.householdId,
-      categoryId: dto.categoryId,
-      accountId: dto.accountId,
-    });
-
-    const startDate = new Date(dto.date);
-    const recurring = this.recurringRepository.create({
-      amount: dto.amount,
-      description: dto.description,
-      dayOfMonth: startDate.getDate(),
-      frequency: dto.recurringFrequency,
-      startDate,
-      household: { id: dto.householdId } as any,
-      category: { id: dto.categoryId } as any,
-      account: dto.accountId ? ({ id: dto.accountId } as any) : null,
-    });
-    const saved = await this.recurringRepository.save(recurring);
-    return toRecurringShared(saved);
+    return { kind: 'budgetItems', data: [created] };
   }
 
   private async createBoundedRecurring(
-    dto: CreateTransactionDto,
-  ): Promise<TransactionShared[]> {
+    dto: CreateBudgetItemDto,
+  ): Promise<BudgetItemShared[]> {
     if (!dto.recurringFrequency) {
-      throw new Error('recurringFrequency is required for recurring transactions');
+      throw new Error('recurringFrequency is required for recurring budget items');
     }
 
     const startDate = new Date(dto.date);
@@ -246,13 +186,13 @@ export class TransactionService {
         accountId: dto.accountId,
       });
 
-      const txRepo = queryRunner.manager.getRepository(Transaction);
-      const created: Transaction[] = [];
+      const repo = queryRunner.manager.getRepository(BudgetItem);
+      const created: BudgetItem[] = [];
       let stepIndex = 0;
       while (true) {
         const current = addMonthsClamped(startDate, step * stepIndex);
         if (current.getTime() > endDate.getTime()) break;
-        const entity = txRepo.create({
+        const entity = repo.create({
           amount: dto.amount,
           date: current,
           description: dto.description,
@@ -261,17 +201,18 @@ export class TransactionService {
           installmentsTotal: null,
           installmentIndex: null,
           installmentGroupId: null,
+          endDate: endDate,
           household: { id: dto.householdId } as any,
           category: dto.categoryId ? ({ id: dto.categoryId } as any) : null,
           account: dto.accountId ? ({ id: dto.accountId } as any) : null,
         });
-        const saved = await txRepo.save(entity);
+        const saved = await repo.save(entity);
         created.push(saved);
         stepIndex += 1;
       }
 
       await queryRunner.commitTransaction();
-      return created.map(toTransactionShared);
+      return created.map(toBudgetItemShared);
     } catch (err) {
       await queryRunner.rollbackTransaction();
       throw err;
@@ -281,8 +222,8 @@ export class TransactionService {
   }
 
   private async createInstallments(
-    dto: CreateTransactionDto,
-  ): Promise<TransactionShared[]> {
+    dto: CreateBudgetItemDto,
+  ): Promise<BudgetItemShared[]> {
     const total = dto.installmentsTotal as number;
     const payloadIndex = dto.installmentIndex as number;
     const groupId = randomUUID();
@@ -298,12 +239,12 @@ export class TransactionService {
         accountId: dto.accountId,
       });
 
-      const txRepo = queryRunner.manager.getRepository(Transaction);
-      const created: Transaction[] = [];
+      const repo = queryRunner.manager.getRepository(BudgetItem);
+      const created: BudgetItem[] = [];
       for (let i = 1; i <= total; i++) {
         const offset = i - payloadIndex;
         const installmentDate = addMonthsClamped(payloadDate, offset);
-        const entity = txRepo.create({
+        const entity = repo.create({
           amount: dto.amount,
           date: installmentDate,
           description: dto.description,
@@ -312,16 +253,17 @@ export class TransactionService {
           installmentsTotal: total,
           installmentIndex: i,
           installmentGroupId: groupId,
+          endDate: null,
           household: { id: dto.householdId } as any,
           category: dto.categoryId ? ({ id: dto.categoryId } as any) : null,
           account: dto.accountId ? ({ id: dto.accountId } as any) : null,
         });
-        const saved = await txRepo.save(entity);
+        const saved = await repo.save(entity);
         created.push(saved);
       }
 
       await queryRunner.commitTransaction();
-      return created.map(toTransactionShared);
+      return created.map(toBudgetItemShared);
     } catch (err) {
       await queryRunner.rollbackTransaction();
       throw err;
@@ -330,16 +272,16 @@ export class TransactionService {
     }
   }
 
-  private async createSingleTransaction(
-    dto: CreateTransactionDto,
-  ): Promise<TransactionShared> {
-    await this.assertReferencesExist(this.transactionRepository.manager, {
+  private async createSingleBudgetItem(
+    dto: CreateBudgetItemDto,
+  ): Promise<BudgetItemShared> {
+    await this.assertReferencesExist(this.budgetItemRepository.manager, {
       householdId: dto.householdId,
       categoryId: dto.categoryId,
       accountId: dto.accountId,
     });
 
-    const transaction = this.transactionRepository.create({
+    const budgetItem = this.budgetItemRepository.create({
       amount: dto.amount,
       date: new Date(dto.date),
       description: dto.description,
@@ -348,12 +290,13 @@ export class TransactionService {
       installmentsTotal: null,
       installmentIndex: null,
       installmentGroupId: null,
+      endDate: null,
       household: { id: dto.householdId } as any,
       category: dto.categoryId ? ({ id: dto.categoryId } as any) : null,
       account: dto.accountId ? ({ id: dto.accountId } as any) : null,
     });
-    const saved = await this.transactionRepository.save(transaction);
-    return toTransactionShared(saved);
+    const saved = await this.budgetItemRepository.save(budgetItem);
+    return toBudgetItemShared(saved);
   }
 
   private async assertReferencesExist(
@@ -392,106 +335,20 @@ export class TransactionService {
 
   async findAll(
     householdId: string,
-    month?: number,
-    year?: number,
-  ): Promise<TransactionListItem[]> {
-    const query = this.transactionRepository
-      .createQueryBuilder('transaction')
-      .leftJoinAndSelect('transaction.household', 'household')
-      .leftJoinAndSelect('transaction.category', 'category')
-      .leftJoinAndSelect('transaction.account', 'account')
-      .where('household.id = :householdId', { householdId });
+  ): Promise<BudgetItemListItem[]> {
+    const rows = await this.budgetItemRepository
+      .createQueryBuilder('budgetItem')
+      .leftJoinAndSelect('budgetItem.household', 'household')
+      .leftJoinAndSelect('budgetItem.category', 'category')
+      .leftJoinAndSelect('budgetItem.account', 'account')
+      .where('household.id = :householdId', { householdId })
+      .getMany();
 
-    const realRows = await query.getMany();
-    const realItems: TransactionListItem[] = realRows.map(toTransactionShared);
-
-    if (month === undefined || year === undefined) {
-      return realItems;
-    }
-
-    let recurringRows: RecurringTransaction[] = [];
-    try {
-      recurringRows = await this.recurringRepository
-        .createQueryBuilder('recurring')
-        .leftJoinAndSelect('recurring.household', 'household')
-        .leftJoinAndSelect('recurring.category', 'category')
-        .leftJoinAndSelect('recurring.account', 'account')
-        .where('household.id = :householdId', { householdId })
-        .getMany();
-    } catch (err) {
-      console.warn(
-        '[transactions.findAll] recurring projection skipped:',
-        err instanceof Error ? err.message : err,
-      );
-      return realItems;
-    }
-
-    const projections: RecurringTransactionProjection[] = [];
-    for (const recurring of recurringRows) {
-      const start = new Date(recurring.startDate);
-      const monthDiff =
-        (year - start.getFullYear()) * 12 +
-        (month - (start.getMonth() + 1));
-      if (monthDiff < 0) continue;
-      if (
-        recurring.frequency === TransactionFrequency.BI_MONTHLY &&
-        monthDiff % 2 !== 0
-      ) {
-        continue;
-      }
-
-      const monthIndex = month - 1;
-      const clampedDay = Math.min(
-        recurring.dayOfMonth,
-        daysInMonth(year, monthIndex),
-      );
-      const projectedDate = new Date(
-        year,
-        monthIndex,
-        clampedDay,
-        start.getHours(),
-        start.getMinutes(),
-        start.getSeconds(),
-        start.getMilliseconds(),
-      );
-
-      projections.push({
-        id: null,
-        isProjection: true,
-        recurringTransactionId: recurring.id,
-        amount: String(recurring.amount),
-        date: projectedDate.toISOString(),
-        description: recurring.description,
-        isCleared: false,
-        frequency: CategoryFrequency.MONTHLY,
-        installmentsTotal: null,
-        installmentIndex: null,
-        installmentGroupId: null,
-        householdId: recurring.household?.id ?? '',
-        categoryId: recurring.category?.id ?? null,
-        accountId: recurring.account?.id ?? null,
-        createdAt:
-          recurring.createdAt instanceof Date
-            ? recurring.createdAt.toISOString()
-            : (recurring.createdAt as unknown as string),
-        updatedAt:
-          recurring.updatedAt instanceof Date
-            ? recurring.updatedAt.toISOString()
-            : (recurring.updatedAt as unknown as string),
-      });
-    }
-
-    const merged: TransactionListItem[] = [...realItems, ...projections];
-    merged.sort((a, b) => {
-      const aTime = new Date(a.date).getTime();
-      const bTime = new Date(b.date).getTime();
-      return aTime - bTime;
-    });
-    return merged;
+    return rows.map(toBudgetItemShared);
   }
 
-  async findOne(id: string): Promise<Transaction | null> {
-    return await this.transactionRepository.findOne({
+  async findOne(id: string): Promise<BudgetItem | null> {
+    return await this.budgetItemRepository.findOne({
       where: { id },
       relations: ['household', 'category', 'account'],
     });
@@ -499,47 +356,47 @@ export class TransactionService {
 
   async update(
     id: string,
-    updateTransactionDto: UpdateTransactionDto,
-  ): Promise<Transaction | null> {
+    updateBudgetItemDto: UpdateBudgetItemDto,
+  ): Promise<BudgetItem | null> {
     const existing = await this.findOne(id);
     if (!existing) return null;
 
-    if (updateTransactionDto.amount !== undefined) {
-      existing.amount = updateTransactionDto.amount;
+    if (updateBudgetItemDto.amount !== undefined) {
+      existing.amount = updateBudgetItemDto.amount;
     }
-    if (updateTransactionDto.date !== undefined) {
-      existing.date = new Date(updateTransactionDto.date);
+    if (updateBudgetItemDto.date !== undefined) {
+      existing.date = new Date(updateBudgetItemDto.date);
     }
-    if (updateTransactionDto.description !== undefined) {
-      existing.description = updateTransactionDto.description;
+    if (updateBudgetItemDto.description !== undefined) {
+      existing.description = updateBudgetItemDto.description;
     }
-    if (updateTransactionDto.isCleared !== undefined) {
-      existing.isCleared = updateTransactionDto.isCleared;
+    if (updateBudgetItemDto.isCleared !== undefined) {
+      existing.isCleared = updateBudgetItemDto.isCleared;
     }
-    if (updateTransactionDto.frequency !== undefined) {
-      existing.frequency = updateTransactionDto.frequency;
+    if (updateBudgetItemDto.frequency !== undefined) {
+      existing.frequency = updateBudgetItemDto.frequency;
     }
-    if (updateTransactionDto.householdId !== undefined) {
-      existing.household = { id: updateTransactionDto.householdId } as any;
+    if (updateBudgetItemDto.householdId !== undefined) {
+      existing.household = { id: updateBudgetItemDto.householdId } as any;
     }
-    if (updateTransactionDto.categoryId !== undefined) {
-      existing.category = updateTransactionDto.categoryId
-        ? ({ id: updateTransactionDto.categoryId } as any)
+    if (updateBudgetItemDto.categoryId !== undefined) {
+      existing.category = updateBudgetItemDto.categoryId
+        ? ({ id: updateBudgetItemDto.categoryId } as any)
         : null;
     }
-    if (updateTransactionDto.accountId !== undefined) {
-      existing.account = updateTransactionDto.accountId
-        ? ({ id: updateTransactionDto.accountId } as any)
+    if (updateBudgetItemDto.accountId !== undefined) {
+      existing.account = updateBudgetItemDto.accountId
+        ? ({ id: updateBudgetItemDto.accountId } as any)
         : null;
     }
 
-    await this.transactionRepository.save(existing);
+    await this.budgetItemRepository.save(existing);
     return await this.findOne(id);
   }
 
   async remove(id: string): Promise<void> {
-    await this.transactionRepository.delete(id);
+    await this.budgetItemRepository.delete(id);
   }
 }
 
-export const transactionService = new TransactionService();
+export const budgetItemService = new BudgetItemService();

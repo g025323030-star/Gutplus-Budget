@@ -5,7 +5,7 @@ import { Household } from '../entities/household.entity';
 import { FamilyMember, FamilyMemberRole } from '../entities/family-member.entity';
 import { Account, AccountType } from '../entities/account.entity';
 import { Category, CategoryType, CategoryFrequency } from '../entities/category.entity';
-import { Transaction } from '../entities/transaction.entity';
+import { BudgetItem } from '../entities/budget-item.entity';
 import { BudgetPlan } from '../entities/budget-plan.entity';
 
 async function seedDatabase() {
@@ -20,7 +20,7 @@ async function seedDatabase() {
       try {
         // Use TRUNCATE ... CASCADE to handle foreign key constraints
         await queryRunner.query(
-          'TRUNCATE TABLE "transaction" CASCADE'
+          'TRUNCATE TABLE "budget_item" CASCADE'
         );
         await queryRunner.query(
           'TRUNCATE TABLE "budget_plan" CASCADE'
@@ -203,20 +203,21 @@ async function seedDatabase() {
 
     console.log('✅ Categories created');
 
-    // Create Transactions
-    console.log('💳 Creating transactions...');
-    const transactionRepository = AppDataSource.getRepository(Transaction);
+    // Create Budget Items
+    console.log('💳 Creating budget items...');
+    const budgetItemRepository = AppDataSource.getRepository(BudgetItem);
     const today = new Date();
     const sevenDaysAgo = new Date(today.getTime() - 7 * 24 * 60 * 60 * 1000);
     const thirtyDaysAgo = new Date(today.getTime() - 30 * 24 * 60 * 60 * 1000);
 
-    await transactionRepository.save([
+    await budgetItemRepository.save([
       {
         amount: '450',
         date: today,
         description: 'קנייה במכולת',
         isCleared: true,
         frequency: CategoryFrequency.MONTHLY,
+        endDate: null,
         household: household1,
         category: groceryCategory,
         account: account1,
@@ -227,6 +228,7 @@ async function seedDatabase() {
         description: 'בדק מים וחשמל',
         isCleared: true,
         frequency: CategoryFrequency.MONTHLY,
+        endDate: null,
         household: household1,
         category: utilityCategory,
         account: account1,
@@ -237,6 +239,7 @@ async function seedDatabase() {
         description: 'שכר חודשי',
         isCleared: true,
         frequency: CategoryFrequency.MONTHLY,
+        endDate: null,
         household: household1,
         category: incomeCategory,
         account: account1,
@@ -247,13 +250,14 @@ async function seedDatabase() {
         description: 'תשלום כרטיס אשראי',
         isCleared: false,
         frequency: CategoryFrequency.MONTHLY,
+        endDate: null,
         household: household1,
         category: null,
         account: account2,
       },
     ]);
 
-    console.log('✅ Transactions created');
+    console.log('✅ תחומים נוצרו');
 
     // Create Budget Plans
     console.log('📊 Creating budget plans...');

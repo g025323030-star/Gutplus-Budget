@@ -1,7 +1,7 @@
 import { useMemo } from 'react';
 import { CalendarDays } from 'lucide-react';
 import { CategoryType } from '@gutplus/shared';
-import type { BudgetPlan, Category, Transaction } from '@gutplus/shared';
+import type { BudgetPlan, Category, BudgetItem } from '@gutplus/shared';
 import { ICON_STROKE } from '../../constants/ui';
 
 const HEBREW_MONTHS = [
@@ -27,7 +27,7 @@ interface SnapshotCalendarProps {
   mode: PeriodMode;
   year: number;
   month: number;
-  transactions: Transaction[];
+  transactions: BudgetItem[];
   categoryById: Map<string, Category>;
   budgetPlans: BudgetPlan[];
 }
@@ -59,7 +59,7 @@ const monthBudgetTotal = (
 const buildMonthCells = (
   month: number,
   year: number,
-  transactions: Transaction[],
+  transactions: BudgetItem[],
   categoryById: Map<string, Category>,
   budgetPlans: BudgetPlan[],
 ): DayCell[] => {

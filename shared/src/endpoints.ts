@@ -39,7 +39,7 @@ export const ENDPOINTS = {
   budgetPlans: {
     base: 'budget-plans',
   },
-  transactions: {
-    base: 'transactions',
+  budgetItems: {
+    base: 'budget-items',
   },
 } as const;

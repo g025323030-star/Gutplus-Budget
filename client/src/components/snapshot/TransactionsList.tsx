@@ -1,7 +1,7 @@
 import { useMemo } from 'react';
 import { ArrowDownCircle, ArrowUpCircle, BarChart3 } from 'lucide-react';
 import { CategoryFrequency, CategoryType } from '@gutplus/shared';
-import type { Category, Transaction } from '@gutplus/shared';
+import type { BudgetItem, Category } from '@gutplus/shared';
 import { ICON_STROKE } from '../../constants/ui';
 
 const HEBREW_MONTHS = [
@@ -23,7 +23,7 @@ type PeriodMode = 'monthly' | 'yearly';
 
 interface TransactionsListProps {
   mode: PeriodMode;
-  transactions: Transaction[];
+  transactions: BudgetItem[];
   categoryById: Map<string, Category>;
   year: number;
 }
@@ -49,7 +49,7 @@ interface RowEntry {
 }
 
 const buildRows = (
-  transactions: Transaction[],
+  transactions: BudgetItem[],
   categoryById: Map<string, Category>,
   type: CategoryType,
   mode: PeriodMode,
@@ -87,7 +87,7 @@ interface MonthlyTotals {
 }
 
 const buildMonthlyTotals = (
-  transactions: Transaction[],
+  transactions: BudgetItem[],
   categoryById: Map<string, Category>,
   year: number,
 ): MonthlyTotals[] => {

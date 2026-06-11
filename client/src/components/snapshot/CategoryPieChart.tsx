@@ -9,13 +9,13 @@ import {
 } from 'recharts';
 import { PieChart as PieChartIcon } from 'lucide-react';
 import { CategoryFrequency, CategoryType } from '@gutplus/shared';
-import type { Category, Transaction } from '@gutplus/shared';
+import type { Category, BudgetItem } from '@gutplus/shared';
 import { ICON_STROKE } from '../../constants/ui';
 
 type PeriodMode = 'monthly' | 'yearly';
 
 interface CategoryPieChartProps {
-  transactions: Transaction[];
+  transactions: BudgetItem[];
   categoryById: Map<string, Category>;
   mode: PeriodMode;
 }

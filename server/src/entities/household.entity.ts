@@ -9,10 +9,10 @@ import {
   UpdateDateColumn,
 } from 'typeorm';
 import { Account } from './account.entity';
+import { BudgetItem } from './budget-item.entity';
 import { BudgetPlan } from './budget-plan.entity';
 import { Category } from './category.entity';
 import { FamilyMember } from './family-member.entity';
-import { Transaction } from './transaction.entity';
 import { User } from './user.entity';
 
 @Entity({ name: 'household' })
@@ -57,6 +57,6 @@ export class Household {
   @OneToMany(() => BudgetPlan, budgetPlan => budgetPlan.household)
   budgetPlans!: BudgetPlan[];
 
-  @OneToMany(() => Transaction, transaction => transaction.household)
-  transactions!: Transaction[];
+  @OneToMany(() => BudgetItem, budgetItem => budgetItem.household)
+  budgetItems!: BudgetItem[];
 }

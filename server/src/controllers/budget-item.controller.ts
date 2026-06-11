@@ -1,12 +1,12 @@
 import { Request, Response, NextFunction } from 'express';
-import { transactionService, householdService } from '../services';
-import { CreateTransactionDto, UpdateTransactionDto } from '../dto';
+import { budgetItemService, householdService } from '../services';
+import { CreateBudgetItemDto, UpdateBudgetItemDto } from '../dto';
 
-export class TransactionController {
+export class BudgetItemController {
   async create(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
-      const createTransactionDto: CreateTransactionDto = req.body;
-      const result = await transactionService.create(createTransactionDto);
+      const createBudgetItemDto: CreateBudgetItemDto = req.body;
+      const result = await budgetItemService.create(createBudgetItemDto);
       res.status(201).json({
         success: true,
         data: result,
@@ -38,31 +38,10 @@ export class TransactionController {
         return;
       }
 
-      const monthParam = req.query.month;
-      const yearParam = req.query.year;
-      const month =
-        typeof monthParam === 'string' && monthParam.length > 0
-          ? Number(monthParam)
-          : undefined;
-      const year =
-        typeof yearParam === 'string' && yearParam.length > 0
-          ? Number(yearParam)
-          : undefined;
-      const safeMonth =
-        month !== undefined && Number.isFinite(month) && month >= 1 && month <= 12
-          ? month
-          : undefined;
-      const safeYear =
-        year !== undefined && Number.isFinite(year) ? year : undefined;
-
-      const transactions = await transactionService.findAll(
-        household.id,
-        safeMonth,
-        safeYear,
-      );
+      const budgetItems = await budgetItemService.findAll(household.id);
       res.status(200).json({
         success: true,
-        data: transactions,
+        data: budgetItems,
       });
     } catch (error) {
       next(error);
@@ -72,17 +51,17 @@ export class TransactionController {
   async findOne(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
       const { id } = req.params;
-      const transaction = await transactionService.findOne(id);
-      if (!transaction) {
+      const budgetItem = await budgetItemService.findOne(id);
+      if (!budgetItem) {
         res.status(404).json({
           success: false,
-          message: 'Transaction not found',
+          message: 'תחום לא נמצא',
         });
         return;
       }
       res.status(200).json({
         success: true,
-        data: transaction,
+        data: budgetItem,
       });
     } catch (error) {
       next(error);
@@ -92,18 +71,18 @@ export class TransactionController {
   async update(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
       const { id } = req.params;
-      const updateTransactionDto: UpdateTransactionDto = req.body;
-      const transaction = await transactionService.update(id, updateTransactionDto);
-      if (!transaction) {
+      const updateBudgetItemDto: UpdateBudgetItemDto = req.body;
+      const budgetItem = await budgetItemService.update(id, updateBudgetItemDto);
+      if (!budgetItem) {
         res.status(404).json({
           success: false,
-          message: 'Transaction not found',
+          message: 'תחום לא נמצא',
         });
         return;
       }
       res.status(200).json({
         success: true,
-        data: transaction,
+        data: budgetItem,
       });
     } catch (error) {
       next(error);
@@ -113,10 +92,10 @@ export class TransactionController {
   async remove(req: Request, res: Response, next: NextFunction): Promise<void> {
     try {
       const { id } = req.params;
-      await transactionService.remove(id);
+      await budgetItemService.remove(id);
       res.status(200).json({
         success: true,
-        message: 'Transaction deleted successfully',
+        message: 'תחום נמחק בהצלחה',
       });
     } catch (error) {
       next(error);
@@ -124,4 +103,4 @@ export class TransactionController {
   }
 }
 
-export const transactionController = new TransactionController();
+export const budgetItemController = new BudgetItemController();

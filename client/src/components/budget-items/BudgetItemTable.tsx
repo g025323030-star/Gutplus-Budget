@@ -6,11 +6,11 @@ import type { Category, CategoryFrequency } from '@gutplus/shared';
 import { TransactionFrequency } from '@gutplus/shared';
 import { ICON_STROKE } from '../../constants/ui';
 import {
-  createTransaction,
-  deleteTransaction,
-  updateTransaction,
-} from '../../services/transactions.service';
-import TransactionRow, { validateRow } from './TransactionRow';
+  createBudgetItem,
+  deleteBudgetItem,
+  updateBudgetItem,
+} from '../../services/budget-items.service';
+import BudgetItemRow, { validateRow } from './BudgetItemRow';
 import type { DraftRow } from './types';
 import { snapshotOf, snapshotsEqual } from './types';
 
@@ -36,7 +36,7 @@ const extractErrorMessage = (err: unknown): string => {
   return 'שגיאה בשמירה';
 };
 
-interface TransactionTableProps {
+interface BudgetItemTableProps {
   rows: DraftRow[];
   categories: Category[];
   householdId: string;
@@ -56,7 +56,7 @@ interface TransactionTableProps {
   descriptionPlaceholder?: string;
 }
 
-export default function TransactionTable({
+export default function BudgetItemTable({
   rows,
   categories,
   householdId,
@@ -74,7 +74,7 @@ export default function TransactionTable({
   showTemplatesButton = false,
   title = 'רשימת הוצאות',
   descriptionPlaceholder = 'לדוגמה: סופר',
-}: TransactionTableProps) {
+}: BudgetItemTableProps) {
   const rowsRef = useRef<DraftRow[]>(rows);
   const pendingResave = useRef<Record<string, boolean>>({});
   const newRowFocus = useRef<string | null>(null);
@@ -153,7 +153,7 @@ export default function TransactionTable({
       try {
         let savedId = current.serverId;
         // Installments and recurring are create-only and mutually exclusive
-        // (enforced by createTransactionSchema on the server).
+        // (enforced by createBudgetItemSchema on the server).
         const isUnsavedInstallments =
           !savedId &&
           current.mode === 'installments' &&
@@ -184,10 +184,10 @@ export default function TransactionTable({
             : base;
 
         if (savedId) {
-          await updateTransaction(savedId, base);
+          await updateBudgetItem(savedId, base);
         } else {
-          const created = await createTransaction(payload);
-          if (created.kind === 'transactions' && created.data.length > 0) {
+          const created = await createBudgetItem(payload);
+          if (created.kind === 'budgetItems' && created.data.length > 0) {
             savedId = created.data[0].id;
           }
         }
@@ -201,9 +201,8 @@ export default function TransactionTable({
         scheduleSyncedFade(localId);
 
         if (isUnsavedInstallments || isUnsavedRecurring) {
-          // Installments expand into multiple rows, and a permanent recurring
-          // rule has no single transaction id — reload so the generated
-          // occurrences/projections show up correctly.
+          // Installments expand into multiple rows — reload so the generated
+          // occurrences show up correctly.
           onAfterAdvancedModeSave?.();
         }
 
@@ -257,7 +256,7 @@ export default function TransactionTable({
         return;
       }
       try {
-        await deleteTransaction(current.serverId);
+        await deleteBudgetItem(current.serverId);
         removeRow(localId);
       } catch (err) {
         patchRow(localId, {
@@ -406,7 +405,7 @@ export default function TransactionTable({
 
         <AnimatePresence initial={false}>
           {rows.map((row) => (
-            <TransactionRow
+            <BudgetItemRow
               key={row.localId}
               row={row}
               categories={categories}

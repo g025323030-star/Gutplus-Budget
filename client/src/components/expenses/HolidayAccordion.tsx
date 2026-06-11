@@ -12,12 +12,12 @@ import {
 } from 'lucide-react';
 import { CategoryFrequency, Holiday } from '@gutplus/shared';
 import type {
+  BudgetItem,
   Category,
   HolidayExpenseTemplate,
-  Transaction,
 } from '@gutplus/shared';
 import { ICON_STROKE } from '../../constants/ui';
-import { createTransaction } from '../../services/transactions.service';
+import { createBudgetItem } from '../../services/budget-items.service';
 
 const HOLIDAY_DEFAULT_MMDD: Record<Holiday, [number, number]> = {
   [Holiday.PASSOVER]: [4, 15],
@@ -55,7 +55,7 @@ interface HolidayAccordionProps {
   year: number;
   categories: Category[];
   householdId: string;
-  onTransactionsCreated: (transactions: Transaction[]) => void;
+  onTransactionsCreated: (transactions: BudgetItem[]) => void;
 }
 
 type SaveStatus = 'idle' | 'saving' | 'success' | 'error';
@@ -157,7 +157,7 @@ export default function HolidayAccordion({
 
     const results = await Promise.allSettled(
       targets.map(({ it }) =>
-        createTransaction({
+        createBudgetItem({
           amount: it.amount,
           date: targetDate,
           description: it.label.trim(),
@@ -168,14 +168,14 @@ export default function HolidayAccordion({
       ),
     );
 
-    const succeededTransactions: Transaction[] = [];
+    const succeededTransactions: BudgetItem[] = [];
     const failedLocalIds = new Set<string>();
     const failureMessages: string[] = [];
 
     results.forEach((res, i) => {
       const localId = targets[i].it.localId;
       if (res.status === 'fulfilled') {
-        if (res.value.kind === 'transactions') {
+        if (res.value.kind === 'budgetItems') {
           succeededTransactions.push(...res.value.data);
         }
       } else {

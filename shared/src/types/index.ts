@@ -4,7 +4,6 @@ export * from './family-member.types';
 export * from './account.types';
 export * from './category.types';
 export * from './budget-plan.types';
-export * from './transaction.types';
+export * from './budget-item.types';
 export * from './token.types';
 export * from './holiday-expense-template.types';
-export * from './recurring-transaction.types';

@@ -146,8 +146,8 @@ export default function AdvancedModeModal({
               <button
                 type="button"
                 onClick={handleClose}
-                aria-label="סגור והפוך לעסקה רגילה"
-                title="סגור והפוך לעסקה רגילה"
+                aria-label="סגור והפוך לתחום רגיל"
+                title="סגור והפוך לתחום רגיל"
                 className="w-9 h-9 rounded-lg text-slate-400 hover:text-primary hover:bg-background transition-all flex items-center justify-center"
               >
                 <X className="w-5 h-5" strokeWidth={1.5} />
@@ -170,7 +170,7 @@ export default function AdvancedModeModal({
                   className={tabButtonClass(tab === 'recurring')}
                 >
                   <Repeat size={18} strokeWidth={1.5} />
-                  עסקה קבועה
+                  תחום קבוע
                 </button>
               </div>
             )}
@@ -222,7 +222,7 @@ export default function AdvancedModeModal({
             ) : (
               <div className="space-y-4">
                 <p className="body-text-sm text-slate-500">
-                  תיווצר עסקה חוזרת המופיעה אוטומטית בכל חודש.
+                  תחום שיחזור אוטומטית בכל חודש.
                 </p>
 
                 {showBiMonthly && (
@@ -233,7 +233,7 @@ export default function AdvancedModeModal({
                       onChange={(e) => setIsBiMonthly(e.target.checked)}
                       className="w-5 h-5 rounded border-slate-300 text-accent focus:ring-accent"
                     />
-                    <span className="body-text">עסקה דו-חודשית</span>
+                    <span className="body-text">תחום דו-חודשי</span>
                   </label>
                 )}
 
