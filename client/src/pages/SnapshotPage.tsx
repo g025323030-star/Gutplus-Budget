@@ -1,11 +1,10 @@
 import { useEffect, useMemo, useState } from 'react';
 import { AlertCircle, LayoutDashboard } from 'lucide-react';
 import { CategoryFrequency, CategoryType } from '@gutplus/shared';
-import type { BudgetItem, BudgetPlan, Category } from '@gutplus/shared';
+import type { BudgetItem, Category } from '@gutplus/shared';
 import { ICON_STROKE } from '../constants/ui';
 import { getBudgetItems } from '../services/budget-items.service';
 import { getCategories } from '../services/categories.service';
-import { getBudgetPlans } from '../services/budget-plans.service';
 import PeriodToggle from '../components/snapshot/PeriodToggle';
 import type { PeriodMode } from '../components/snapshot/PeriodToggle';
 import SummaryCards from '../components/snapshot/SummaryCards';
@@ -71,7 +70,6 @@ export default function SnapshotPage() {
 
   const [transactions, setTransactions] = useState<BudgetItem[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
-  const [budgetPlans, setBudgetPlans] = useState<BudgetPlan[]>([]);
 
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
@@ -86,10 +84,9 @@ export default function SnapshotPage() {
       const queryMonth = mode === 'monthly' ? selectedMonth : undefined;
       const queryYear = selectedYear;
 
-      const [txResult, catsResult, plansResult] = await Promise.allSettled([
+      const [txResult, catsResult] = await Promise.allSettled([
         getBudgetItems(queryMonth, queryYear),
         getCategories(),
-        getBudgetPlans(queryMonth, queryYear),
       ]);
       if (cancelled) return;
 
@@ -97,12 +94,6 @@ export default function SnapshotPage() {
         setCategories(catsResult.value);
       } else {
         console.error('Error loading categories:', catsResult.reason);
-      }
-
-      if (plansResult.status === 'fulfilled') {
-        setBudgetPlans(plansResult.value);
-      } else {
-        console.error('Error loading budget plans:', plansResult.reason);
       }
 
       if (txResult.status === 'fulfilled') {
@@ -207,7 +198,6 @@ export default function SnapshotPage() {
                 month={selectedMonth}
                 transactions={periodTransactions}
                 categoryById={categoryById}
-                budgetPlans={budgetPlans}
               />
             </div>
 

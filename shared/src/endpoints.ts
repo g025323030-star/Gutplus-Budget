@@ -36,13 +36,13 @@ export const ENDPOINTS = {
   familyMembers: {
     base: 'family-members',
   },
-  budgetPlans: {
-    base: 'budget-plans',
-  },
   budgetItems: {
     base: 'budget-items',
   },
   summary: {
     base: 'summary',
+  },
+  budgetForecast: {
+    base: 'budget-forecast',
   },
 } as const;

@@ -4,7 +4,6 @@ import * as path from 'path';
 import { DataSource } from 'typeorm';
 import { Account } from '../entities/account.entity';
 import { BudgetItem } from '../entities/budget-item.entity';
-import { BudgetPlan } from '../entities/budget-plan.entity';
 import { Category } from '../entities/category.entity';
 import { ExchangeRate } from '../entities/exchange-rate.entity';
 import { FamilyMember } from '../entities/family-member.entity';
@@ -33,7 +32,6 @@ export const AppDataSource = new DataSource({
   entities: [
     Account,
     BudgetItem,
-    BudgetPlan,
     Category,
     ExchangeRate,
     FamilyMember,

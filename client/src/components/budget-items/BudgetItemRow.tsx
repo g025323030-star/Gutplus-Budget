@@ -9,12 +9,29 @@ import SaveIndicator from './SaveIndicator';
 import TargetPopover from './TargetPopover';
 import type { DraftRow } from './types';
 
+const HEBREW_MONTHS_SELECT = [
+  'ינואר',
+  'פברואר',
+  'מרץ',
+  'אפריל',
+  'מאי',
+  'יוני',
+  'יולי',
+  'אוגוסט',
+  'ספטמבר',
+  'אוקטובר',
+  'נובמבר',
+  'דצמבר',
+];
+
 interface BudgetItemRowProps {
   row: DraftRow;
   categories: Category[];
   descriptionPlaceholder?: string;
   monthConstraint?: number;
   yearConstraint: number;
+  isYearly?: boolean;
+  isBiMonthlySection?: boolean;
   autoFocus?: boolean;
   focused?: boolean;
   onFocus?: () => void;
@@ -58,6 +75,8 @@ const validateField = (
   row: DraftRow,
   yearConstraint: number,
   monthConstraint?: number,
+  isYearly?: boolean,
+  isBiMonthlySection?: boolean,
 ): string | null => {
   switch (key) {
     case 'description':
@@ -71,6 +90,22 @@ const validateField = (
         : 'סכום חייב להיות גדול מ-0';
     }
     case 'date': {
+      // Bi-monthly rows are scheduled by a base month (parity), not a calendar date.
+      if (isBiMonthlySection) {
+        return row.baseMonth ? null : 'בחר חודש בסיס';
+      }
+      // In yearly mode: if isOneTime we need a date; if not isOneTime, assignedMonth or spread is enough
+      if (isYearly) {
+        if (row.isOneTime) {
+          if (!row.date) return 'תאריך חובה לפריט חד-פעמי';
+          const d = new Date(row.date);
+          if (Number.isNaN(d.getTime())) return 'תאריך לא תקין';
+          if (d.getFullYear() !== yearConstraint)
+            return 'התאריך מחוץ לשנה הנבחרת';
+        }
+        // non-one-time yearly: no date required (assignedMonth or spread)
+        return null;
+      }
       if (!row.date) return 'תאריך חובה';
       const d = new Date(row.date);
       if (Number.isNaN(d.getTime())) return 'תאריך לא תקין';
@@ -91,6 +126,8 @@ export default function BudgetItemRow({
   descriptionPlaceholder = 'לדוגמה: סופר',
   monthConstraint,
   yearConstraint,
+  isYearly = false,
+  isBiMonthlySection = false,
   autoFocus = false,
   focused = false,
   onFocus,
@@ -159,7 +196,16 @@ export default function BudgetItemRow({
   };
 
   const errorFor = (key: FieldKey): string | null =>
-    touched[key] ? validateField(key, row, yearConstraint, monthConstraint) : null;
+    touched[key]
+      ? validateField(
+          key,
+          row,
+          yearConstraint,
+          monthConstraint,
+          isYearly,
+          isBiMonthlySection,
+        )
+      : null;
 
   const fieldClass = (key: FieldKey): string =>
     errorFor(key)
@@ -272,21 +318,145 @@ export default function BudgetItemRow({
         </div>
 
         <div>
-          <label className="label-text mb-1 block md:hidden">תאריך</label>
-          <input
-            type="date"
-            value={row.date}
-            min={bounds.min}
-            max={bounds.max}
-            onChange={(e) => onPatch({ date: e.target.value })}
-            onBlur={() => setTouched((t) => ({ ...t, date: true }))}
-            aria-label="תאריך"
-            className={fieldClass('date')}
-          />
-          {errorFor('date') && (
-            <p className="body-text-sm text-red-500 mt-1">
-              {errorFor('date')}
-            </p>
+          {isYearly ? (
+            <>
+              {/* "הכנסה / הוצאה חד-פעמית" checkbox */}
+              <label className="label-text mb-1 flex items-center gap-2 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={row.isOneTime}
+                  onChange={(e) => {
+                    const checked = e.target.checked;
+                    onPatch({
+                      isOneTime: checked,
+                      assignedMonth: checked ? null : row.assignedMonth,
+                      date: checked ? row.date : '',
+                    });
+                  }}
+                  aria-label="פריט חד-פעמי"
+                  className="w-4 h-4 accent-accent cursor-pointer"
+                />
+                <span className="label-text hidden md:inline">חד-פעמי</span>
+              </label>
+              {row.isOneTime ? (
+                // One-time: show full date picker
+                <>
+                  <input
+                    type="date"
+                    value={row.date}
+                    min={bounds.min}
+                    max={bounds.max}
+                    onChange={(e) => onPatch({ date: e.target.value })}
+                    onBlur={() => setTouched((t) => ({ ...t, date: true }))}
+                    aria-label="תאריך"
+                    className={fieldClass('date')}
+                  />
+                  {errorFor('date') && (
+                    <p className="body-text-sm text-red-500 mt-1">
+                      {errorFor('date')}
+                    </p>
+                  )}
+                </>
+              ) : (
+                // Recurring yearly: month select or spread
+                <>
+                  <select
+                    value={row.assignedMonth ?? 'spread'}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      onPatch({
+                        assignedMonth: val === 'spread' ? null : Number(val),
+                        date: '',
+                      });
+                    }}
+                    aria-label="חודש שיוך"
+                    className={`${INPUT_CLASS} cursor-pointer appearance-none`}
+                  >
+                    <option value="spread">פריסה ל-12 חודשים</option>
+                    {HEBREW_MONTHS_SELECT.map((label, idx) => (
+                      <option key={label} value={idx + 1}>
+                        {label}
+                      </option>
+                    ))}
+                  </select>
+                  {/* Display chip */}
+                  {row.assignedMonth === null ? (
+                    <p className="body-text-sm text-accent mt-1">
+                      נפרס ל-12 חודשים
+                      {row.amount && Number(row.amount) > 0 && (
+                        <span className="text-slate-400 mr-1">
+                          ({new Intl.NumberFormat('he-IL', { style: 'currency', currency: 'ILS', maximumFractionDigits: 0 }).format(Number(row.amount) / 12)}/חודש)
+                        </span>
+                      )}
+                    </p>
+                  ) : (
+                    <p className="body-text-sm text-slate-400 mt-1">
+                      {HEBREW_MONTHS_SELECT[row.assignedMonth - 1]}
+                    </p>
+                  )}
+                </>
+              )}
+            </>
+          ) : isBiMonthlySection ? (
+            <>
+              <label className="label-text mb-1 block md:hidden">חודש בסיס</label>
+              <select
+                value={row.baseMonth ?? ''}
+                onChange={(e) => {
+                  setTouched((t) => ({ ...t, date: true }));
+                  const val = e.target.value;
+                  if (!val) {
+                    onPatch({ baseMonth: null, date: '' });
+                    return;
+                  }
+                  const month = Number(val);
+                  onPatch({
+                    baseMonth: month,
+                    date: `${yearConstraint}-${padTwo(month)}-01`,
+                  });
+                }}
+                aria-label="חודש בסיס"
+                className={`${INPUT_CLASS} cursor-pointer appearance-none`}
+              >
+                <option value="">בחר חודש בסיס</option>
+                {HEBREW_MONTHS_SELECT.map((label, idx) => (
+                  <option key={label} value={idx + 1}>
+                    {label}
+                  </option>
+                ))}
+              </select>
+              {row.baseMonth ? (
+                <p className="body-text-sm text-accent mt-1">
+                  {row.baseMonth % 2 === 0
+                    ? 'יחויב בחודשים זוגיים'
+                    : 'יחויב בחודשים אי-זוגיים'}
+                </p>
+              ) : null}
+              {errorFor('date') && (
+                <p className="body-text-sm text-red-500 mt-1">
+                  {errorFor('date')}
+                </p>
+              )}
+            </>
+          ) : (
+            <>
+              <label className="label-text mb-1 block md:hidden">תאריך</label>
+              <input
+                type="date"
+                value={row.date}
+                min={bounds.min}
+                max={bounds.max}
+                onChange={(e) => onPatch({ date: e.target.value })}
+                onBlur={() => setTouched((t) => ({ ...t, date: true }))}
+                aria-label="תאריך"
+                className={fieldClass('date')}
+              />
+              {errorFor('date') && (
+                <p className="body-text-sm text-red-500 mt-1">
+                  {errorFor('date')}
+                </p>
+              )}
+            </>
           )}
         </div>
 
@@ -414,7 +584,17 @@ export const validateRow = (
   row: DraftRow,
   yearConstraint: number,
   monthConstraint?: number,
+  isYearly?: boolean,
+  isBiMonthlySection?: boolean,
 ): boolean =>
   (['description', 'categoryId', 'amount', 'date'] as FieldKey[]).every(
-    (key) => validateField(key, row, yearConstraint, monthConstraint) === null,
+    (key) =>
+      validateField(
+        key,
+        row,
+        yearConstraint,
+        monthConstraint,
+        isYearly,
+        isBiMonthlySection,
+      ) === null,
   );

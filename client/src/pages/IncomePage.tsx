@@ -84,6 +84,9 @@ const toDraftRow = (item: BudgetItemListItem): DraftRow | null => {
     needsReview: item.needsReview ?? false,
     targetAmount: item.targetAmount ?? null,
     currency: item.currency ?? CurrencyCode.ILS,
+    assignedMonth: (item as { assignedMonth?: number | null }).assignedMonth ?? null,
+    isOneTime: (item as { isOneTime?: boolean }).isOneTime ?? false,
+    baseMonth: (item as { baseMonth?: number | null }).baseMonth ?? null,
   };
   base.lastSavedSnapshot = snapshotOf(base);
   return base;
@@ -150,8 +153,10 @@ export default function IncomePage() {
     const load = async () => {
       setIsLoading(true);
       setError(null);
+      // For monthly: fetch by month+year. For yearly: fetch by year only.
+      const fetchMonth = activeTab === 'monthly' ? selectedMonth : undefined;
       const [txResult, catsResult] = await Promise.allSettled([
-        getBudgetItems(selectedMonth, selectedYear),
+        getBudgetItems(fetchMonth, selectedYear),
         getCategories(),
       ]);
       if (cancelled) return;
@@ -170,12 +175,15 @@ export default function IncomePage() {
             .filter((c) => c.type === CategoryType.INCOME)
             .map((c) => c.id),
         );
+        const targetFrequency =
+          activeTab === 'yearly' ? CategoryFrequency.YEARLY : CategoryFrequency.MONTHLY;
         const draftRows: DraftRow[] = txResult.value
           .filter(
             (item) =>
               !isProjectionItem(item) &&
               item.categoryId !== null &&
-              incomeCatIds.has(item.categoryId),
+              incomeCatIds.has(item.categoryId) &&
+              item.frequency === targetFrequency,
           )
           .map((item) => toDraftRow(item))
           .filter((r): r is DraftRow => r !== null);
@@ -194,7 +202,7 @@ export default function IncomePage() {
       cancelled = true;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedMonth, selectedYear, householdId, reloadKey]);
+  }, [activeTab, selectedMonth, selectedYear, householdId, reloadKey]);
 
   const buildIncomeTemplateRows = useCallback(
     (currentRows: DraftRow[]): DraftRow[] => {
@@ -225,6 +233,9 @@ export default function IncomePage() {
           needsReview: false,
           targetAmount: null,
           currency: CurrencyCode.ILS,
+          assignedMonth: null,
+          isOneTime: false,
+          baseMonth: null,
         });
       }
       return newRows;
@@ -273,12 +284,14 @@ export default function IncomePage() {
       for (const row of validRows) {
         const payload = {
           amount: String(row.amount),
-          date: row.date,
+          date: row.date || undefined,
           description: row.description.trim(),
           frequency: CategoryFrequency.MONTHLY,
           householdId: householdId,
           categoryId: row.categoryId ?? undefined,
           installmentsTotal: row.installmentsTotal ?? undefined,
+          assignedMonth: row.assignedMonth ?? undefined,
+          isOneTime: row.isOneTime || undefined,
         };
 
         const result = await createBudgetItem(payload);
@@ -467,14 +480,12 @@ export default function IncomePage() {
         <div className="flex items-center gap-2 bg-surface p-1 rounded-xl shadow-sm border border-slate-100">
           <button
             type="button"
-            disabled
             onClick={() => setActiveTab('yearly')}
             className={`px-4 py-1.5 rounded-lg label-text transition-all duration-200 ${
               activeTab === 'yearly'
                 ? 'bg-accent text-white'
-                : 'text-slate-400 cursor-not-allowed'
+                : 'text-slate-500 hover:text-primary'
             }`}
-            title="בקרוב"
           >
             שנתי
           </button>
@@ -516,25 +527,27 @@ export default function IncomePage() {
           />
         </div>
 
-        <div className="relative">
-          <select
-            value={selectedMonth}
-            onChange={(e) => setSelectedMonth(Number(e.target.value))}
-            aria-label="בחירת חודש"
-            className="appearance-none bg-surface border border-slate-200 px-8 py-2 rounded-xl label-text text-primary focus:outline-none focus:border-accent shadow-sm cursor-pointer"
-          >
-            {HEBREW_MONTHS.map((label, idx) => (
-              <option key={label} value={idx + 1}>
-                {label}
-              </option>
-            ))}
-          </select>
-          <ChevronDown
-            size={14}
-            strokeWidth={ICON_STROKE}
-            className="absolute left-3 top-3.5 text-slate-400 pointer-events-none"
-          />
-        </div>
+        {activeTab === 'monthly' && (
+          <div className="relative">
+            <select
+              value={selectedMonth}
+              onChange={(e) => setSelectedMonth(Number(e.target.value))}
+              aria-label="בחירת חודש"
+              className="appearance-none bg-surface border border-slate-200 px-8 py-2 rounded-xl label-text text-primary focus:outline-none focus:border-accent shadow-sm cursor-pointer"
+            >
+              {HEBREW_MONTHS.map((label, idx) => (
+                <option key={label} value={idx + 1}>
+                  {label}
+                </option>
+              ))}
+            </select>
+            <ChevronDown
+              size={14}
+              strokeWidth={ICON_STROKE}
+              className="absolute left-3 top-3.5 text-slate-400 pointer-events-none"
+            />
+          </div>
+        )}
 
         <div className="w-10 h-10 bg-surface border border-slate-200 rounded-xl flex items-center justify-center text-slate-400 shadow-sm">
           <Calendar size={18} strokeWidth={ICON_STROKE} />
@@ -560,17 +573,18 @@ export default function IncomePage() {
           rows={rows}
           categories={incomeCategories}
           householdId={householdId}
-          frequency={CategoryFrequency.MONTHLY}
-          monthConstraint={selectedMonth}
+          frequency={activeTab === 'yearly' ? CategoryFrequency.YEARLY : CategoryFrequency.MONTHLY}
+          monthConstraint={activeTab === 'monthly' ? selectedMonth : undefined}
           yearConstraint={selectedYear}
+          isYearly={activeTab === 'yearly'}
           onChange={handleRowsChange}
           isLoading={isLoading}
           onAddCategoryRequest={handleAddCategoryRequest}
           onAdvancedModeRequest={handleAdvancedModeRequest}
           onAfterAdvancedModeSave={handleAfterAdvancedModeSave}
-          showTemplatesButton={!isFirstUse}
+          showTemplatesButton={!isFirstUse && activeTab === 'monthly'}
           onFillTemplates={handleFillIncomeTemplates}
-          title="רשימת הכנסות"
+          title={activeTab === 'yearly' ? 'הכנסות שנתיות' : 'רשימת הכנסות'}
           descriptionPlaceholder="לדוגמה: משכורת"
         />
       </motion.div>

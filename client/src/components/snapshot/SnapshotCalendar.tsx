@@ -1,7 +1,7 @@
 import { useMemo } from 'react';
 import { CalendarDays } from 'lucide-react';
 import { CategoryType } from '@gutplus/shared';
-import type { BudgetPlan, Category, BudgetItem } from '@gutplus/shared';
+import type { Category, BudgetItem } from '@gutplus/shared';
 import { ICON_STROKE } from '../../constants/ui';
 
 const HEBREW_MONTHS = [
@@ -29,39 +29,23 @@ interface SnapshotCalendarProps {
   month: number;
   transactions: BudgetItem[];
   categoryById: Map<string, Category>;
-  budgetPlans: BudgetPlan[];
 }
 
 interface DayCell {
   day: number;
   income: number;
   expense: number;
-  color: 'red' | 'green' | 'yellow' | 'neutral';
+  color: 'green' | 'yellow' | 'neutral';
 }
 
 const daysInMonth = (month: number, year: number): number =>
   new Date(year, month, 0).getDate();
-
-const monthBudgetTotal = (
-  budgetPlans: BudgetPlan[],
-  month: number,
-  year: number,
-): number => {
-  let total = 0;
-  budgetPlans.forEach((plan) => {
-    if (plan.month !== month || plan.year !== year) return;
-    if (plan.categoryId !== null) return;
-    total += parseFloat(plan.amount) || 0;
-  });
-  return total;
-};
 
 const buildMonthCells = (
   month: number,
   year: number,
   transactions: BudgetItem[],
   categoryById: Map<string, Category>,
-  budgetPlans: BudgetPlan[],
 ): DayCell[] => {
   const totalDays = daysInMonth(month, year);
   const cells: DayCell[] = Array.from({ length: totalDays }, (_, i) => ({
@@ -94,13 +78,8 @@ const buildMonthCells = (
     }
   });
 
-  const monthBudget = monthBudgetTotal(budgetPlans, month, year);
-  const dailyThreshold = monthBudget > 0 ? monthBudget / totalDays : null;
-
   cells.forEach((cell) => {
-    if (dailyThreshold !== null && cell.expense > dailyThreshold) {
-      cell.color = 'red';
-    } else if (cell.income > 0) {
+    if (cell.income > 0) {
       cell.color = 'green';
     } else if (cell.expense > 0) {
       cell.color = 'yellow';
@@ -112,8 +91,6 @@ const buildMonthCells = (
 
 const colorClass = (color: DayCell['color']): string => {
   switch (color) {
-    case 'red':
-      return 'bg-red-500 text-white';
     case 'green':
       return 'bg-green-500 text-white';
     case 'yellow':
@@ -188,7 +165,6 @@ function CalendarLegend() {
   const items: Array<{ color: string; label: string }> = [
     { color: 'bg-green-500', label: 'הכנסה' },
     { color: 'bg-yellow-500', label: 'הוצאה' },
-    { color: 'bg-red-500', label: 'חריגה' },
   ];
   return (
     <div className="flex flex-wrap items-center gap-3 mt-4">
@@ -211,11 +187,10 @@ export default function SnapshotCalendar({
   month,
   transactions,
   categoryById,
-  budgetPlans,
 }: SnapshotCalendarProps) {
   const monthlyCells = useMemo(
-    () => buildMonthCells(month, year, transactions, categoryById, budgetPlans),
-    [month, year, transactions, categoryById, budgetPlans],
+    () => buildMonthCells(month, year, transactions, categoryById),
+    [month, year, transactions, categoryById],
   );
 
   const yearlyCellsByMonth = useMemo(() => {
@@ -224,11 +199,11 @@ export default function SnapshotCalendar({
     for (let m = 1; m <= 12; m += 1) {
       map.set(
         m,
-        buildMonthCells(m, year, transactions, categoryById, budgetPlans),
+        buildMonthCells(m, year, transactions, categoryById),
       );
     }
     return map;
-  }, [mode, year, transactions, categoryById, budgetPlans]);
+  }, [mode, year, transactions, categoryById]);
 
   return (
     <div className="bg-surface rounded-2xl shadow-sm border border-slate-100 p-6">

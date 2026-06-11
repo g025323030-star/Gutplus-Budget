@@ -4,6 +4,6 @@ export { default as tokenRoutes } from './token.routes';
 export { default as accountRoutes } from './account.routes';
 export { default as categoryRoutes } from './category.routes';
 export { default as familyMemberRoutes } from './family-member.routes';
-export { default as budgetPlanRoutes } from './budget-plan.routes';
 export { default as budgetItemRoutes } from './budget-item.routes';
 export { default as summaryRoutes } from './summary.routes';
+export { default as forecastRoutes } from './forecast.routes';

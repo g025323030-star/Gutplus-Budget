@@ -11,9 +11,9 @@ import {
   accountRoutes,
   categoryRoutes,
   familyMemberRoutes,
-  budgetPlanRoutes,
   budgetItemRoutes,
   summaryRoutes,
+  forecastRoutes,
 } from './routes';
 import { errorHandler } from './middlewares';
 import { rollingTokenMiddleware } from './middlewares/referenceToken';
@@ -58,9 +58,9 @@ app.use(`${API_PREFIX}/${ENDPOINTS.households.base}`, authGuard, householdRoutes
 app.use(`${API_PREFIX}/${ENDPOINTS.accounts.base}`, authGuard, accountRoutes);
 app.use(`${API_PREFIX}/${ENDPOINTS.categories.base}`, authGuard, categoryRoutes);
 app.use(`${API_PREFIX}/${ENDPOINTS.familyMembers.base}`, authGuard, familyMemberRoutes);
-app.use(`${API_PREFIX}/${ENDPOINTS.budgetPlans.base}`, authGuard, budgetPlanRoutes);
 app.use(`${API_PREFIX}/${ENDPOINTS.budgetItems.base}`, authGuard, budgetItemRoutes);
 app.use(`${API_PREFIX}/${ENDPOINTS.summary.base}`, authGuard, summaryRoutes);
+app.use(`${API_PREFIX}/${ENDPOINTS.budgetForecast.base}`, authGuard, forecastRoutes);
 
 // Health check
 app.get('/health', async (req, res) => {

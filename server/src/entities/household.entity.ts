@@ -10,7 +10,6 @@ import {
 } from 'typeorm';
 import { Account } from './account.entity';
 import { BudgetItem } from './budget-item.entity';
-import { BudgetPlan } from './budget-plan.entity';
 import { Category } from './category.entity';
 import { FamilyMember } from './family-member.entity';
 import { User } from './user.entity';
@@ -53,9 +52,6 @@ export class Household {
 
   @OneToMany(() => Category, category => category.household)
   categories!: Category[];
-
-  @OneToMany(() => BudgetPlan, budgetPlan => budgetPlan.household)
-  budgetPlans!: BudgetPlan[];
 
   @OneToMany(() => BudgetItem, budgetItem => budgetItem.household)
   budgetItems!: BudgetItem[];

@@ -103,11 +103,16 @@ export function isItemIncludedInMonth(
 
 /**
  * Returns the contributing amount string for this item in the queried month.
- * Handles yearly spread (÷12) and otherwise returns `item.amount` unchanged.
+ * Handles yearly spread (÷12) and otherwise returns the resolved base amount unchanged.
+ *
+ * @param item          - The BudgetItem to compute for.
+ * @param amountResolver - Function that returns the base amount string for a given item.
+ *                         Summary passes `(i) => i.amount`; forecast passes
+ *                         `(i) => i.targetAmount ?? i.amount`.
  *
  * Precondition: `isItemIncludedInMonth` must have returned true for this item.
  */
-function getContributingAmount(item: BudgetItem): string {
+function getContributingAmount(item: BudgetItem, amountResolver: (item: BudgetItem) => string): string {
   // Yearly spread (no assignedMonth, no holiday, not isOneTime, no installmentGroupId)
   if (
     item.frequency === CategoryFrequency.YEARLY &&
@@ -117,14 +122,14 @@ function getContributingAmount(item: BudgetItem): string {
     item.installmentGroupId === null
   ) {
     // Divide by 12, decimal-safe
-    const cents = toCents(item.amount);
+    const cents = toCents(amountResolver(item));
     const monthly = cents / 12n;
     const remainder = cents % 12n;
     // Round: if remainder * 2 >= 12, round up
     const rounded = remainder * 2n >= 12n ? monthly + 1n : monthly;
     return centsToNumber(rounded).toFixed(2);
   }
-  return item.amount;
+  return amountResolver(item);
 }
 
 // ---------------------------------------------------------------------------
@@ -190,6 +195,157 @@ async function resolveDebtCategoryIds(
 }
 
 // ---------------------------------------------------------------------------
+// Core aggregation engine (shared between summary and forecast)
+// ---------------------------------------------------------------------------
+
+export interface AggregateMonthResult {
+  summary: MonthlySummary;
+  /** True if at least one item in this month used targetAmount (not amount). */
+  hadTargetAmount: boolean;
+}
+
+/**
+ * Core aggregation engine used by both SummaryService and ForecastService.
+ *
+ * @param items           - All budget items for the household (pre-loaded with category).
+ * @param debtCategoryIds - Set of category IDs belonging to the debt subtree.
+ * @param rateMap         - Pre-fetched exchange rates (currency → ILS rate string).
+ * @param month           - Gregorian month 1-12.
+ * @param year            - Gregorian year.
+ * @param amountResolver  - Returns the base amount string for a given item.
+ *                          Summary: `(i) => i.amount`
+ *                          Forecast: `(i) => i.targetAmount ?? i.amount`
+ */
+export function aggregateMonth(
+  items: BudgetItem[],
+  debtCategoryIds: Set<string>,
+  rateMap: Map<CurrencyCode, string>,
+  month: number,
+  year: number,
+  amountResolver: (item: BudgetItem) => string,
+): AggregateMonthResult {
+  // Helper: convert amount string to ILS using pre-fetched rate map
+  const convertToIls = (amount: string, currency: CurrencyCode): bigint => {
+    if (currency === CurrencyCode.ILS) {
+      return toCents(amount);
+    }
+    const rate = rateMap.get(currency) ?? '1';
+    const [rInt, rFrac = ''] = rate.split('.');
+    const rFracNorm = rFrac.padEnd(6, '0').slice(0, 6);
+    const amountCents = toCents(amount); // BigInt, ×100
+    // rate as integer (×1_000_000)
+    const rateMicro = BigInt(rInt) * 1_000_000n + BigInt(rFracNorm);
+    // amountCents * rateMicro = amount * rate * 100 * 1_000_000 → divide by 1_000_000
+    const raw = amountCents * rateMicro;
+    const cents = raw / 1_000_000n;
+    return cents;
+  };
+
+  // Accumulate buckets (all in BigInt cents)
+  let incomesMonthly = 0n;
+  let incomesYearly = 0n;
+  let expensesMonthly = 0n;
+  let expensesYearly = 0n;
+  let expensesHolidays = 0n;
+  let expensesInstallments = 0n;
+  let debtRepayments = 0n;
+  let hadTargetAmount = false;
+
+  for (const item of items) {
+    if (!isItemIncludedInMonth(item, month, year)) {
+      continue;
+    }
+
+    // Track whether targetAmount was used
+    if (item.targetAmount !== null) {
+      hadTargetAmount = true;
+    }
+
+    const contributingAmountStr = getContributingAmount(item, amountResolver);
+    const ilsCents = convertToIls(contributingAmountStr, item.currency);
+
+    const categoryType = item.category?.type;
+    const categoryId = item.category?.id;
+
+    // Check if this is a debt repayment item
+    const isDebt = categoryId !== undefined && categoryId !== null && debtCategoryIds.has(categoryId);
+
+    if (isDebt) {
+      debtRepayments += ilsCents;
+      continue;
+    }
+
+    if (categoryType === CategoryType.INCOME) {
+      // Income bucketing: MONTHLY → incomes.monthly; everything else → incomes.yearly
+      if (
+        item.frequency === CategoryFrequency.MONTHLY &&
+        item.baseMonth === null &&
+        item.installmentGroupId === null &&
+        !item.isOneTime &&
+        item.holiday === null
+      ) {
+        incomesMonthly += ilsCents;
+      } else {
+        incomesYearly += ilsCents;
+      }
+    } else {
+      // EXPENSE bucketing (holiday and installment take priority)
+      if (item.holiday !== null) {
+        expensesHolidays += ilsCents;
+      } else if (item.installmentGroupId !== null) {
+        expensesInstallments += ilsCents;
+      } else if (item.frequency === CategoryFrequency.MONTHLY) {
+        expensesMonthly += ilsCents;
+      } else {
+        expensesYearly += ilsCents;
+      }
+    }
+  }
+
+  // Convert cents to rounded numbers (2 dp)
+  const round2 = (cents: bigint): number => {
+    const n = centsToNumber(cents);
+    return Math.round(n * 100) / 100;
+  };
+
+  const incomesMonthlyNum = round2(incomesMonthly);
+  const incomesYearlyNum = round2(incomesYearly);
+  const expensesMonthlyNum = round2(expensesMonthly);
+  const expensesYearlyNum = round2(expensesYearly);
+  const expensesHolidaysNum = round2(expensesHolidays);
+  const expensesInstallmentsNum = round2(expensesInstallments);
+  const debtRepaymentsNum = round2(debtRepayments);
+
+  const balanceBeforeDebts =
+    Math.round(
+      (incomesMonthlyNum + incomesYearlyNum -
+        expensesMonthlyNum - expensesYearlyNum -
+        expensesHolidaysNum - expensesInstallmentsNum) * 100,
+    ) / 100;
+
+  const balanceAfterDebts =
+    Math.round((balanceBeforeDebts - debtRepaymentsNum) * 100) / 100;
+
+  const summary: MonthlySummary = {
+    incomes: {
+      monthly: incomesMonthlyNum,
+      yearly: incomesYearlyNum,
+    },
+    expenses: {
+      monthly: expensesMonthlyNum,
+      yearly: expensesYearlyNum,
+      holidays: expensesHolidaysNum,
+      installments: expensesInstallmentsNum,
+    },
+    debtRepayments: debtRepaymentsNum,
+    balanceBeforeDebts,
+    balanceAfterDebts,
+  };
+
+  return { summary, hadTargetAmount };
+}
+
+// ---------------------------------------------------------------------------
 // Main service
 // ---------------------------------------------------------------------------
 
@@ -239,122 +395,17 @@ export class SummaryService {
       }),
     );
 
-    // Helper: convert amount string to ILS using pre-fetched rate map
-    const convertToIls = (amount: string, currency: CurrencyCode): bigint => {
-      if (currency === CurrencyCode.ILS) {
-        return toCents(amount);
-      }
-      const rate = rateMap.get(currency) ?? '1';
-      // Multiply: amount * rate, stay in cents
-      // We already have toCents(amount) as X*100, and rate as a decimal string.
-      // Use floating point only for the rate multiplication, then reparse:
-      // safer: use string multiplication via toCents on the result of multiply
-      const [rInt, rFrac = ''] = rate.split('.');
-      const rFracNorm = rFrac.padEnd(6, '0').slice(0, 6);
-      const amountCents = toCents(amount); // BigInt, ×100
-      // rate as integer (×1_000_000)
-      const rateMicro = BigInt(rInt) * 1_000_000n + BigInt(rFracNorm);
-      // amountCents * rateMicro = amount * rate * 100 * 1_000_000
-      // We want amount * rate * 100 (i.e. ILS cents), so divide by 1_000_000
-      const raw = amountCents * rateMicro;
-      const cents = raw / 1_000_000n;
-      return cents;
-    };
+    // 4. Delegate to shared aggregation engine with the summary amount resolver
+    const { summary } = aggregateMonth(
+      items,
+      debtCategoryIds,
+      rateMap,
+      month,
+      year,
+      (item) => item.amount,
+    );
 
-    // 4. Accumulate buckets (all in BigInt cents)
-    let incomesMonthly = 0n;
-    let incomesYearly = 0n;
-    let expensesMonthly = 0n;
-    let expensesYearly = 0n;
-    let expensesHolidays = 0n;
-    let expensesInstallments = 0n;
-    let debtRepayments = 0n;
-
-    for (const item of items) {
-      if (!isItemIncludedInMonth(item, month, year)) {
-        continue;
-      }
-
-      const contributingAmountStr = getContributingAmount(item);
-      const ilsCents = convertToIls(contributingAmountStr, item.currency);
-
-      const categoryType = item.category?.type;
-      const categoryId = item.category?.id;
-
-      // Check if this is a debt repayment item
-      const isDebt = categoryId !== undefined && categoryId !== null && debtCategoryIds.has(categoryId);
-
-      if (isDebt) {
-        debtRepayments += ilsCents;
-        continue;
-      }
-
-      if (categoryType === CategoryType.INCOME) {
-        // Income bucketing: MONTHLY → incomes.monthly; everything else → incomes.yearly
-        if (
-          item.frequency === CategoryFrequency.MONTHLY &&
-          item.baseMonth === null &&
-          item.installmentGroupId === null &&
-          !item.isOneTime &&
-          item.holiday === null
-        ) {
-          incomesMonthly += ilsCents;
-        } else {
-          incomesYearly += ilsCents;
-        }
-      } else {
-        // EXPENSE bucketing (holiday and installment take priority)
-        if (item.holiday !== null) {
-          expensesHolidays += ilsCents;
-        } else if (item.installmentGroupId !== null) {
-          expensesInstallments += ilsCents;
-        } else if (item.frequency === CategoryFrequency.MONTHLY) {
-          expensesMonthly += ilsCents;
-        } else {
-          expensesYearly += ilsCents;
-        }
-      }
-    }
-
-    // 5. Convert cents to rounded numbers (2 dp)
-    const round2 = (cents: bigint): number => {
-      const n = centsToNumber(cents);
-      return Math.round(n * 100) / 100;
-    };
-
-    const incomesMonthlyNum = round2(incomesMonthly);
-    const incomesYearlyNum = round2(incomesYearly);
-    const expensesMonthlyNum = round2(expensesMonthly);
-    const expensesYearlyNum = round2(expensesYearly);
-    const expensesHolidaysNum = round2(expensesHolidays);
-    const expensesInstallmentsNum = round2(expensesInstallments);
-    const debtRepaymentsNum = round2(debtRepayments);
-
-    const balanceBeforeDebts =
-      Math.round(
-        (incomesMonthlyNum + incomesYearlyNum -
-          expensesMonthlyNum - expensesYearlyNum -
-          expensesHolidaysNum - expensesInstallmentsNum) * 100,
-      ) / 100;
-
-    const balanceAfterDebts =
-      Math.round((balanceBeforeDebts - debtRepaymentsNum) * 100) / 100;
-
-    return {
-      incomes: {
-        monthly: incomesMonthlyNum,
-        yearly: incomesYearlyNum,
-      },
-      expenses: {
-        monthly: expensesMonthlyNum,
-        yearly: expensesYearlyNum,
-        holidays: expensesHolidaysNum,
-        installments: expensesInstallmentsNum,
-      },
-      debtRepayments: debtRepaymentsNum,
-      balanceBeforeDebts,
-      balanceAfterDebts,
-    };
+    return summary;
   }
 }
 

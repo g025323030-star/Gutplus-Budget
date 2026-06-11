@@ -54,6 +54,8 @@ interface BudgetItemTableProps {
   showTemplatesButton?: boolean;
   title?: string;
   descriptionPlaceholder?: string;
+  isYearly?: boolean;
+  isBiMonthlySection?: boolean;
 }
 
 export default function BudgetItemTable({
@@ -74,6 +76,8 @@ export default function BudgetItemTable({
   showTemplatesButton = false,
   title = 'רשימת הוצאות',
   descriptionPlaceholder = 'לדוגמה: סופר',
+  isYearly = false,
+  isBiMonthlySection = false,
 }: BudgetItemTableProps) {
   const rowsRef = useRef<DraftRow[]>(rows);
   const pendingResave = useRef<Record<string, boolean>>({});
@@ -139,7 +143,15 @@ export default function BudgetItemTable({
         return;
       }
 
-      if (!validateRow(current, yearConstraint, monthConstraint)) {
+      if (
+        !validateRow(
+          current,
+          yearConstraint,
+          monthConstraint,
+          isYearly,
+          isBiMonthlySection,
+        )
+      ) {
         return;
       }
 
@@ -163,7 +175,7 @@ export default function BudgetItemTable({
 
         const base = {
           amount: current.amount,
-          date: current.date,
+          date: current.date || undefined,
           description: current.description.trim(),
           frequency,
           householdId,
@@ -171,6 +183,9 @@ export default function BudgetItemTable({
           needsReview: current.needsReview,
           targetAmount: current.targetAmount ?? undefined,
           currency: current.currency ?? CurrencyCode.ILS,
+          assignedMonth: current.assignedMonth ?? undefined,
+          isOneTime: current.isOneTime || undefined,
+          baseMonth: current.baseMonth ?? undefined,
         };
 
         const payload = isUnsavedInstallments
@@ -296,6 +311,9 @@ export default function BudgetItemTable({
       needsReview: false,
       targetAmount: null,
       currency: CurrencyCode.ILS,
+      assignedMonth: null,
+      isOneTime: false,
+      baseMonth: null,
     };
     newRowFocus.current = localId;
     const next = [...rowsRef.current, newRow];
@@ -418,6 +436,8 @@ export default function BudgetItemTable({
               descriptionPlaceholder={descriptionPlaceholder}
               monthConstraint={monthConstraint}
               yearConstraint={yearConstraint}
+              isYearly={isYearly}
+              isBiMonthlySection={isBiMonthlySection}
               autoFocus={newRowFocus.current === row.localId}
               focused={focusedRowId === row.localId}
               onFocus={
