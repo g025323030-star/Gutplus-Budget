@@ -6,3 +6,4 @@ export { familyMemberService } from './family-member.service';
 export { tokenService } from './token.service';
 export { budgetPlanService } from './budget-plan.service';
 export { budgetItemService } from './budget-item.service';
+export { exchangeRateService } from './exchange-rate.service';

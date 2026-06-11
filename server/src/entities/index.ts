@@ -5,3 +5,4 @@ export { Account, AccountType } from './account.entity';
 export { Category, CategoryType, CategoryFrequency } from './category.entity';
 export { BudgetPlan } from './budget-plan.entity';
 export { BudgetItem } from './budget-item.entity';
+export { ExchangeRate } from './exchange-rate.entity';

@@ -1,5 +1,5 @@
 import axios from 'axios';
-import { CategoryFrequency, ENDPOINTS } from '@gutplus/shared';
+import { CategoryFrequency, CurrencyCode, ENDPOINTS, Holiday } from '@gutplus/shared';
 import type {
   BudgetItem,
   BudgetItemListItem,
@@ -16,7 +16,7 @@ interface RawBudgetItem {
   amount: string;
   date: string;
   description: string;
-  isCleared: boolean;
+  needsReview: boolean;
   frequency: CategoryFrequency;
   installmentsTotal?: number | null;
   installmentIndex?: number | null;
@@ -28,6 +28,12 @@ interface RawBudgetItem {
   householdId?: string;
   categoryId?: string | null;
   accountId?: string | null;
+  targetAmount?: string | null;
+  assignedMonth?: number | null;
+  baseMonth?: number | null;
+  holiday?: Holiday | null;
+  isOneTime?: boolean;
+  currency?: CurrencyCode;
   createdAt: string;
   updatedAt: string;
 }
@@ -37,7 +43,7 @@ const normalizeBudgetItem = (raw: RawBudgetItem): BudgetItem => ({
   amount: raw.amount,
   date: raw.date,
   description: raw.description,
-  isCleared: raw.isCleared,
+  needsReview: raw.needsReview,
   frequency: raw.frequency ?? CategoryFrequency.MONTHLY,
   installmentsTotal: raw.installmentsTotal ?? null,
   installmentIndex: raw.installmentIndex ?? null,
@@ -46,6 +52,12 @@ const normalizeBudgetItem = (raw: RawBudgetItem): BudgetItem => ({
   householdId: raw.household?.id ?? raw.householdId ?? '',
   categoryId: raw.category?.id ?? raw.categoryId ?? null,
   accountId: raw.account?.id ?? raw.accountId ?? null,
+  targetAmount: raw.targetAmount ?? null,
+  assignedMonth: raw.assignedMonth ?? null,
+  baseMonth: raw.baseMonth ?? null,
+  holiday: raw.holiday ?? null,
+  isOneTime: raw.isOneTime ?? false,
+  currency: raw.currency ?? CurrencyCode.ILS,
   createdAt: raw.createdAt,
   updatedAt: raw.updatedAt,
 });

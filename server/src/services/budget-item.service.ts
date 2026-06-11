@@ -2,6 +2,7 @@ import { randomUUID } from 'crypto';
 import { EntityManager, Repository } from 'typeorm';
 import {
   CategoryType,
+  CurrencyCode,
   TransactionFrequency,
 } from '@gutplus/shared';
 import type {
@@ -59,7 +60,7 @@ const toBudgetItemShared = (row: BudgetItem): BudgetItemShared => ({
   amount: row.amount,
   date: row.date instanceof Date ? row.date.toISOString() : (row.date as unknown as string),
   description: row.description,
-  isCleared: row.isCleared,
+  needsReview: row.needsReview,
   frequency: row.frequency,
   installmentsTotal: row.installmentsTotal,
   installmentIndex: row.installmentIndex,
@@ -70,6 +71,12 @@ const toBudgetItemShared = (row: BudgetItem): BudgetItemShared => ({
   householdId: row.household?.id ?? '',
   categoryId: row.category?.id ?? null,
   accountId: row.account?.id ?? null,
+  targetAmount: row.targetAmount,
+  assignedMonth: row.assignedMonth,
+  baseMonth: row.baseMonth,
+  holiday: row.holiday,
+  isOneTime: row.isOneTime,
+  currency: row.currency,
   createdAt:
     row.createdAt instanceof Date
       ? row.createdAt.toISOString()
@@ -165,11 +172,26 @@ export class BudgetItemService {
     return { kind: 'budgetItems', data: [created] };
   }
 
+  private buildBaseFields(dto: CreateBudgetItemDto) {
+    return {
+      needsReview: dto.needsReview ?? false,
+      targetAmount: dto.targetAmount ?? null,
+      assignedMonth: dto.assignedMonth ?? null,
+      baseMonth: dto.baseMonth ?? null,
+      holiday: dto.holiday ?? null,
+      isOneTime: dto.isOneTime ?? false,
+      currency: dto.currency ?? CurrencyCode.ILS,
+    };
+  }
+
   private async createBoundedRecurring(
     dto: CreateBudgetItemDto,
   ): Promise<BudgetItemShared[]> {
     if (!dto.recurringFrequency) {
       throw new Error('recurringFrequency is required for recurring budget items');
+    }
+    if (!dto.date) {
+      throw new Error('date is required for recurring budget items');
     }
 
     const startDate = new Date(dto.date);
@@ -196,7 +218,6 @@ export class BudgetItemService {
           amount: dto.amount,
           date: current,
           description: dto.description,
-          isCleared: dto.isCleared || false,
           frequency: dto.frequency,
           installmentsTotal: null,
           installmentIndex: null,
@@ -205,6 +226,7 @@ export class BudgetItemService {
           household: { id: dto.householdId } as any,
           category: dto.categoryId ? ({ id: dto.categoryId } as any) : null,
           account: dto.accountId ? ({ id: dto.accountId } as any) : null,
+          ...this.buildBaseFields(dto),
         });
         const saved = await repo.save(entity);
         created.push(saved);
@@ -224,6 +246,10 @@ export class BudgetItemService {
   private async createInstallments(
     dto: CreateBudgetItemDto,
   ): Promise<BudgetItemShared[]> {
+    if (!dto.date) {
+      throw new Error('date is required for installment budget items');
+    }
+
     const total = dto.installmentsTotal as number;
     const payloadIndex = dto.installmentIndex as number;
     const groupId = randomUUID();
@@ -248,7 +274,6 @@ export class BudgetItemService {
           amount: dto.amount,
           date: installmentDate,
           description: dto.description,
-          isCleared: dto.isCleared || false,
           frequency: dto.frequency,
           installmentsTotal: total,
           installmentIndex: i,
@@ -257,6 +282,7 @@ export class BudgetItemService {
           household: { id: dto.householdId } as any,
           category: dto.categoryId ? ({ id: dto.categoryId } as any) : null,
           account: dto.accountId ? ({ id: dto.accountId } as any) : null,
+          ...this.buildBaseFields(dto),
         });
         const saved = await repo.save(entity);
         created.push(saved);
@@ -283,9 +309,8 @@ export class BudgetItemService {
 
     const budgetItem = this.budgetItemRepository.create({
       amount: dto.amount,
-      date: new Date(dto.date),
+      date: dto.date ? new Date(dto.date) : new Date(),
       description: dto.description,
-      isCleared: dto.isCleared || false,
       frequency: dto.frequency,
       installmentsTotal: null,
       installmentIndex: null,
@@ -294,6 +319,7 @@ export class BudgetItemService {
       household: { id: dto.householdId } as any,
       category: dto.categoryId ? ({ id: dto.categoryId } as any) : null,
       account: dto.accountId ? ({ id: dto.accountId } as any) : null,
+      ...this.buildBaseFields(dto),
     });
     const saved = await this.budgetItemRepository.save(budgetItem);
     return toBudgetItemShared(saved);
@@ -370,8 +396,8 @@ export class BudgetItemService {
     if (updateBudgetItemDto.description !== undefined) {
       existing.description = updateBudgetItemDto.description;
     }
-    if (updateBudgetItemDto.isCleared !== undefined) {
-      existing.isCleared = updateBudgetItemDto.isCleared;
+    if (updateBudgetItemDto.needsReview !== undefined) {
+      existing.needsReview = updateBudgetItemDto.needsReview;
     }
     if (updateBudgetItemDto.frequency !== undefined) {
       existing.frequency = updateBudgetItemDto.frequency;
@@ -388,6 +414,24 @@ export class BudgetItemService {
       existing.account = updateBudgetItemDto.accountId
         ? ({ id: updateBudgetItemDto.accountId } as any)
         : null;
+    }
+    if (updateBudgetItemDto.targetAmount !== undefined) {
+      existing.targetAmount = updateBudgetItemDto.targetAmount ?? null;
+    }
+    if (updateBudgetItemDto.assignedMonth !== undefined) {
+      existing.assignedMonth = updateBudgetItemDto.assignedMonth ?? null;
+    }
+    if (updateBudgetItemDto.baseMonth !== undefined) {
+      existing.baseMonth = updateBudgetItemDto.baseMonth ?? null;
+    }
+    if (updateBudgetItemDto.holiday !== undefined) {
+      existing.holiday = updateBudgetItemDto.holiday ?? null;
+    }
+    if (updateBudgetItemDto.isOneTime !== undefined) {
+      existing.isOneTime = updateBudgetItemDto.isOneTime;
+    }
+    if (updateBudgetItemDto.currency !== undefined) {
+      existing.currency = updateBudgetItemDto.currency;
     }
 
     await this.budgetItemRepository.save(existing);

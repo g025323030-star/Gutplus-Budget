@@ -8,7 +8,7 @@ import {
   PrimaryGeneratedColumn,
   UpdateDateColumn,
 } from 'typeorm';
-import { CategoryFrequency } from '@gutplus/shared';
+import { CategoryFrequency, CurrencyCode, Holiday } from '@gutplus/shared';
 import { Account } from './account.entity';
 import { Category } from './category.entity';
 import { Household } from './household.entity';
@@ -33,8 +33,8 @@ export class BudgetItem {
   @Column({ name: 'description', type: 'text' })
   description!: string;
 
-  @Column({ name: 'is_cleared', type: 'boolean', default: false })
-  isCleared!: boolean;
+  @Column({ name: 'needs_review', type: 'boolean', default: false })
+  needsReview!: boolean;
 
   @Column({
     name: 'frequency',
@@ -57,6 +57,42 @@ export class BudgetItem {
 
   @Column({ name: 'end_date', type: 'timestamptz', nullable: true })
   endDate!: Date | null;
+
+  @Column({
+    name: 'target_amount',
+    type: 'decimal',
+    precision: 18,
+    scale: 2,
+    nullable: true,
+  })
+  targetAmount!: string | null;
+
+  @Column({ name: 'assigned_month', type: 'int', nullable: true })
+  assignedMonth!: number | null;
+
+  @Column({ name: 'base_month', type: 'int', nullable: true })
+  baseMonth!: number | null;
+
+  @Column({
+    name: 'holiday',
+    type: 'enum',
+    enum: Holiday,
+    enumName: 'holiday_enum',
+    nullable: true,
+  })
+  holiday!: Holiday | null;
+
+  @Column({ name: 'is_one_time', type: 'boolean', default: false })
+  isOneTime!: boolean;
+
+  @Column({
+    name: 'currency',
+    type: 'enum',
+    enum: CurrencyCode,
+    enumName: 'currency_code_enum',
+    default: CurrencyCode.ILS,
+  })
+  currency!: CurrencyCode;
 
   @Index('IDX_budget_item_household')
   @ManyToOne(() => Household, household => household.budgetItems, {

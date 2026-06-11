@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { CategoryFrequency, TransactionFrequency } from '../enums';
+import { CategoryFrequency, CurrencyCode, Holiday, TransactionFrequency } from '../enums';
 import { decimalStringSchema, isoDateStringSchema, uuidSchema } from './common.schemas';
 
 const PLAIN_DATE_REGEX = /^\d{4}-\d{2}-\d{2}$/;
@@ -18,12 +18,14 @@ const dateInputSchema = z
     return value;
   });
 
+const monthSchema = z.number().int().min(1).max(12);
+
 export const budgetItemEntitySchema = z.object({
   id: uuidSchema,
   amount: decimalStringSchema,
   date: isoDateStringSchema,
   description: z.string().min(1),
-  isCleared: z.boolean(),
+  needsReview: z.boolean(),
   frequency: z.nativeEnum(CategoryFrequency),
   installmentsTotal: z.number().int().nullable(),
   installmentIndex: z.number().int().nullable(),
@@ -32,15 +34,21 @@ export const budgetItemEntitySchema = z.object({
   householdId: uuidSchema,
   categoryId: uuidSchema.nullable(),
   accountId: uuidSchema.nullable(),
+  targetAmount: decimalStringSchema.nullable(),
+  assignedMonth: monthSchema.nullable(),
+  baseMonth: monthSchema.nullable(),
+  holiday: z.nativeEnum(Holiday).nullable(),
+  isOneTime: z.boolean(),
+  currency: z.nativeEnum(CurrencyCode),
   createdAt: isoDateStringSchema,
   updatedAt: isoDateStringSchema,
 });
 
 const createBudgetItemBaseSchema = z.object({
   amount: decimalStringSchema,
-  date: dateInputSchema,
+  date: dateInputSchema.optional(),
   description: z.string().min(1),
-  isCleared: z.boolean().optional(),
+  needsReview: z.boolean().optional(),
   frequency: z.nativeEnum(CategoryFrequency),
   installmentsTotal: z.number().int().min(2).max(120).optional(),
   installmentIndex: z.number().int().min(1).optional(),
@@ -50,6 +58,12 @@ const createBudgetItemBaseSchema = z.object({
   isRecurring: z.boolean().optional(),
   endDate: dateInputSchema.optional(),
   recurringFrequency: z.nativeEnum(TransactionFrequency).optional(),
+  targetAmount: decimalStringSchema.optional().nullable(),
+  assignedMonth: monthSchema.optional().nullable(),
+  baseMonth: monthSchema.optional().nullable(),
+  holiday: z.nativeEnum(Holiday).optional().nullable(),
+  isOneTime: z.boolean().optional(),
+  currency: z.nativeEnum(CurrencyCode).optional(),
 });
 
 export const createBudgetItemSchema = createBudgetItemBaseSchema.superRefine(
@@ -116,7 +130,7 @@ export const createBudgetItemSchema = createBudgetItemBaseSchema.superRefine(
       });
     }
 
-    if (value.endDate !== undefined) {
+    if (value.endDate !== undefined && value.date !== undefined) {
       const endMs = Date.parse(value.endDate);
       const startMs = Date.parse(value.date);
       if (!Number.isNaN(endMs) && !Number.isNaN(startMs) && endMs < startMs) {
@@ -124,6 +138,25 @@ export const createBudgetItemSchema = createBudgetItemBaseSchema.superRefine(
           code: z.ZodIssueCode.custom,
           message: 'endDate cannot be earlier than date',
           path: ['endDate'],
+        });
+      }
+    }
+
+    // assignedMonth and baseMonth: range already enforced by monthSchema (1–12)
+    // isOneTime rules
+    if (value.isOneTime === true) {
+      if (value.date === undefined) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: 'date is required when isOneTime is true',
+          path: ['date'],
+        });
+      }
+      if (value.assignedMonth !== undefined && value.assignedMonth !== null) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: 'assignedMonth must be absent or null when isOneTime is true',
+          path: ['assignedMonth'],
         });
       }
     }

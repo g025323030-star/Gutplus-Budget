@@ -1,11 +1,11 @@
-import { CategoryFrequency } from '../enums';
+import { CategoryFrequency, CurrencyCode, Holiday } from '../enums';
 
 export interface BudgetItem {
   id: string;
   amount: string;
   date: string;
   description: string;
-  isCleared: boolean;
+  needsReview: boolean;
   frequency: CategoryFrequency;
   installmentsTotal: number | null;
   installmentIndex: number | null;
@@ -14,6 +14,12 @@ export interface BudgetItem {
   householdId: string;
   categoryId: string | null;
   accountId: string | null;
+  targetAmount: string | null;
+  assignedMonth: number | null;
+  baseMonth: number | null;
+  holiday: Holiday | null;
+  isOneTime: boolean;
+  currency: CurrencyCode;
   createdAt: string;
   updatedAt: string;
 }
