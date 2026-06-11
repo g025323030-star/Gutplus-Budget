@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { motion } from 'framer-motion';
 import { AlertCircle, Calendar, ChevronDown, TrendingUp } from 'lucide-react';
-import { CategoryFrequency, CategoryType } from '@gutplus/shared';
+import { CategoryFrequency, CategoryType, CurrencyCode } from '@gutplus/shared';
 import type { Category, BudgetItemListItem } from '@gutplus/shared';
 import { ICON_STROKE } from '../constants/ui';
 import { useCurrentUser } from '../hooks/useCurrentUser';
@@ -81,6 +81,9 @@ const toDraftRow = (item: BudgetItemListItem): DraftRow | null => {
     mode: installmentsTotal !== null ? 'installments' : 'none',
     endDate: null,
     isBiMonthly: false,
+    needsReview: item.needsReview ?? false,
+    targetAmount: item.targetAmount ?? null,
+    currency: item.currency ?? CurrencyCode.ILS,
   };
   base.lastSavedSnapshot = snapshotOf(base);
   return base;
@@ -219,6 +222,9 @@ export default function IncomePage() {
           mode: 'none',
           endDate: null,
           isBiMonthly: false,
+          needsReview: false,
+          targetAmount: null,
+          currency: CurrencyCode.ILS,
         });
       }
       return newRows;

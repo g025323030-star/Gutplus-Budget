@@ -3,7 +3,7 @@ import axios from 'axios';
 import { AnimatePresence, motion } from 'framer-motion';
 import { AlertTriangle, ListPlus, Plus } from 'lucide-react';
 import type { Category, CategoryFrequency } from '@gutplus/shared';
-import { TransactionFrequency } from '@gutplus/shared';
+import { CurrencyCode, TransactionFrequency } from '@gutplus/shared';
 import { ICON_STROKE } from '../../constants/ui';
 import {
   createBudgetItem,
@@ -168,6 +168,9 @@ export default function BudgetItemTable({
           frequency,
           householdId,
           categoryId: current.categoryId ?? undefined,
+          needsReview: current.needsReview,
+          targetAmount: current.targetAmount ?? undefined,
+          currency: current.currency ?? CurrencyCode.ILS,
         };
 
         const payload = isUnsavedInstallments
@@ -290,6 +293,9 @@ export default function BudgetItemTable({
       mode: 'none',
       endDate: null,
       isBiMonthly: false,
+      needsReview: false,
+      targetAmount: null,
+      currency: CurrencyCode.ILS,
     };
     newRowFocus.current = localId;
     const next = [...rowsRef.current, newRow];

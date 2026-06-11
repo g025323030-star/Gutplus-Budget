@@ -16,6 +16,8 @@ interface CategoryHelperPanelProps {
   // onFillCategoryTemplates?: (mainId: string) => void;
   selectedMainId: string | null;
   onSelectedMainIdChange: (id: string | null) => void;
+  /** Per-categoryId count of rows currently marked needsReview (computed client-side by the parent page) */
+  needsReviewCounts?: Record<string, number>;
 }
 
 export default function CategoryHelperPanel({
@@ -29,7 +31,26 @@ export default function CategoryHelperPanel({
   // onFillCategoryTemplates,
   selectedMainId,
   onSelectedMainIdChange,
+  needsReviewCounts = {},
 }: CategoryHelperPanelProps) {
+
+  /**
+   * For each main category, sum needsReview counts for the main category itself
+   * plus all its direct subcategories.
+   */
+  const mainCategoryReviewCounts = useMemo(() => {
+    const result: Record<string, number> = {};
+    for (const main of mainCategories) {
+      let count = needsReviewCounts[main.id] ?? 0;
+      for (const sub of allCategories) {
+        if (sub.parentCategoryId === main.id) {
+          count += needsReviewCounts[sub.id] ?? 0;
+        }
+      }
+      result[main.id] = count;
+    }
+    return result;
+  }, [mainCategories, allCategories, needsReviewCounts]);
 
   const subcategories = useMemo(() => {
     if (!selectedMainId) return [];
@@ -86,6 +107,7 @@ const handleCategoryClick = (catId: string) => {
           const visual = getCategoryVisual(cat.name);
           const Icon = visual.icon;
           const isSelected = selectedMainId === cat.id;
+          const reviewCount = mainCategoryReviewCounts[cat.id] ?? 0;
           return (
             <button
               key={cat.id}
@@ -97,12 +119,20 @@ const handleCategoryClick = (catId: string) => {
                   ? `מלא שורות פתיחה עבור ${cat.name}`
                   : undefined
               }
-              className={`p-3 rounded-xl border text-right flex flex-col justify-between h-20 transition-all duration-200 ${
+              className={`relative p-3 rounded-xl border text-right flex flex-col justify-between h-20 transition-all duration-200 ${
                 isSelected
                   ? 'bg-primary border-transparent text-white shadow-md'
                   : 'bg-slate-50 hover:bg-slate-100/80 border-slate-200/60 text-primary'
               }`}
             >
+              {reviewCount > 0 && (
+                <span
+                  className="absolute top-1.5 left-1.5 min-w-[18px] h-[18px] bg-red-500 text-white text-[10px] font-bold rounded-full flex items-center justify-center px-1 leading-none"
+                  aria-label={`${reviewCount} שורות לבדיקה`}
+                >
+                  {reviewCount}
+                </span>
+              )}
               <div
                 className={`w-7 h-7 rounded-lg flex items-center justify-center ${
                   isSelected ? 'bg-white/10' : 'bg-white shadow-sm'

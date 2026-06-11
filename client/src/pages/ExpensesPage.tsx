@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { motion } from 'framer-motion';
 import { AlertCircle, Calendar, ChevronDown, TrendingDown } from 'lucide-react';
-import { CategoryFrequency, CategoryType } from '@gutplus/shared';
+import { CategoryFrequency, CategoryType, CurrencyCode } from '@gutplus/shared';
 import type { Category, BudgetItemListItem } from '@gutplus/shared';
 import { ICON_STROKE } from '../constants/ui';
 import { useCurrentUser } from '../hooks/useCurrentUser';
@@ -82,6 +82,9 @@ const toDraftRow = (item: BudgetItemListItem): DraftRow | null => {
     mode: installmentsTotal !== null ? 'installments' : 'none',
     endDate: null,
     isBiMonthly: false,
+    needsReview: item.needsReview ?? false,
+    targetAmount: item.targetAmount ?? null,
+    currency: item.currency ?? CurrencyCode.ILS,
   };
   base.lastSavedSnapshot = snapshotOf(base);
   return base;
@@ -258,6 +261,9 @@ export default function ExpensesPage() {
           mode: 'none',
           endDate: null,
           isBiMonthly: false,
+          needsReview: false,
+          targetAmount: null,
+          currency: CurrencyCode.ILS,
         });
       }
       return newRows;
@@ -439,6 +445,17 @@ export default function ExpensesPage() {
     () => rows.find((r) => r.localId === advancedModeForRowId) ?? null,
     [advancedModeForRowId, rows],
   );
+
+  // Compute per-category needsReview counts (client-side only, no server endpoint)
+  const needsReviewCounts = useMemo(() => {
+    const counts: Record<string, number> = {};
+    for (const row of rows) {
+      if (row.needsReview && row.categoryId) {
+        counts[row.categoryId] = (counts[row.categoryId] ?? 0) + 1;
+      }
+    }
+    return counts;
+  }, [rows]);
 
   const focusedRow = useMemo(
     () => rows.find((r) => r.localId === focusedRowId) ?? null,
@@ -632,6 +649,7 @@ export default function ExpensesPage() {
             isFirstUse={isFirstUse}
             selectedMainId={selectedMainCategoryId}
             onSelectedMainIdChange={setSelectedMainCategoryId}
+            needsReviewCounts={needsReviewCounts}
           />
         </div>
       </motion.div>

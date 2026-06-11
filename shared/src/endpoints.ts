@@ -42,4 +42,7 @@ export const ENDPOINTS = {
   budgetItems: {
     base: 'budget-items',
   },
+  summary: {
+    base: 'summary',
+  },
 } as const;

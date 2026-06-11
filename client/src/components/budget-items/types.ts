@@ -1,4 +1,4 @@
-import type { TransactionFrequency } from '@gutplus/shared';
+import type { CurrencyCode, TransactionFrequency } from '@gutplus/shared';
 import type { RowStatus } from './SaveIndicator';
 
 export type DraftRowMode = 'none' | 'installments' | 'recurring';
@@ -8,6 +8,9 @@ export interface DraftRowSnapshot {
   categoryId: string | null;
   amount: string;
   date: string;
+  needsReview: boolean;
+  targetAmount: string | null;
+  currency: CurrencyCode;
 }
 
 export interface DraftRow extends DraftRowSnapshot {
@@ -31,6 +34,9 @@ export const snapshotOf = (row: DraftRow): DraftRowSnapshot => ({
   categoryId: row.categoryId,
   amount: row.amount,
   date: row.date,
+  needsReview: row.needsReview,
+  targetAmount: row.targetAmount,
+  currency: row.currency,
 });
 
 export const snapshotsEqual = (
@@ -41,6 +47,9 @@ export const snapshotsEqual = (
   a.description === b.description &&
   a.categoryId === b.categoryId &&
   a.amount === b.amount &&
-  a.date === b.date;
+  a.date === b.date &&
+  a.needsReview === b.needsReview &&
+  a.targetAmount === b.targetAmount &&
+  a.currency === b.currency;
 
 export type { RowStatus };

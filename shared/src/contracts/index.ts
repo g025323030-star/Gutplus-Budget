@@ -7,3 +7,4 @@ export * from './categories.contracts';
 export * from './family-members.contracts';
 export * from './budget-plans.contracts';
 export * from './budget-items.contracts';
+export * from './summary.contracts';

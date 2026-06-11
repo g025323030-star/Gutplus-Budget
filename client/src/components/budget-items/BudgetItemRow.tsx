@@ -1,10 +1,12 @@
 import { useEffect, useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
-import { CreditCard, Repeat, Trash2, X } from 'lucide-react';
+import { Bell, CreditCard, Repeat, Trash2, X } from 'lucide-react';
 import type { Category } from '@gutplus/shared';
+import { CurrencyCode } from '@gutplus/shared';
 import { ICON_STROKE } from '../../constants/ui';
 import CategoryCombobox from './CategoryCombobox';
 import SaveIndicator from './SaveIndicator';
+import TargetPopover from './TargetPopover';
 import type { DraftRow } from './types';
 
 interface BudgetItemRowProps {
@@ -178,7 +180,9 @@ export default function BudgetItemRow({
       className={`p-2 md:p-3 rounded-2xl border-2 transition-all duration-200 cursor-pointer ${
         focused
           ? 'bg-slate-50/80 border-accent/30 shadow-sm'
-          : 'border-transparent hover:bg-slate-50/50'
+          : row.needsReview
+            ? 'border-transparent bg-amber-50/60 hover:bg-amber-50/80'
+            : 'border-transparent hover:bg-slate-50/50'
       }`}
     >
       <div className="grid grid-cols-1 gap-3 md:grid-cols-[2fr_1.5fr_1fr_1fr_auto] md:gap-4 md:items-start">
@@ -226,17 +230,40 @@ export default function BudgetItemRow({
         </div>
 
         <div>
-          <label className="label-text mb-1 block md:hidden">סכום (₪)</label>
-          <input
-            type="text"
-            inputMode="decimal"
-            value={row.amount}
-            onChange={(e) => onPatch({ amount: e.target.value })}
-            onBlur={() => setTouched((t) => ({ ...t, amount: true }))}
-            placeholder="0"
-            aria-label="סכום"
-            className={fieldClass('amount')}
-          />
+          <label className="label-text mb-1 block md:hidden">סכום</label>
+          <div className="flex items-stretch gap-1">
+            {/* Currency selector */}
+            <select
+              value={row.currency ?? CurrencyCode.ILS}
+              onChange={(e) => onPatch({ currency: e.target.value as CurrencyCode })}
+              aria-label="מטבע"
+              title="בחר מטבע"
+              className="bg-background/60 border border-slate-200 rounded-xl px-2 py-2.5 text-primary focus:outline-none focus:border-accent transition-all duration-200 text-sm shrink-0 cursor-pointer"
+            >
+              <option value={CurrencyCode.ILS}>₪</option>
+              <option value={CurrencyCode.USD}>$</option>
+              <option value={CurrencyCode.EUR}>€</option>
+              <option value={CurrencyCode.GBP}>£</option>
+            </select>
+            <div className="flex-1 min-w-0">
+              <input
+                type="text"
+                inputMode="decimal"
+                value={row.amount}
+                onChange={(e) => onPatch({ amount: e.target.value })}
+                onBlur={() => setTouched((t) => ({ ...t, amount: true }))}
+                placeholder="0"
+                aria-label="סכום"
+                className={fieldClass('amount')}
+              />
+            </div>
+          </div>
+          {/* TODO: add "converted to ILS" hint here once a client-side exchange-rate endpoint is available */}
+          {(row.currency && row.currency !== CurrencyCode.ILS) && (
+            <p className="body-text-sm text-slate-400 mt-1">
+              סכום ב-{row.currency} — המרה ל-₪ בקרוב
+            </p>
+          )}
           {errorFor('amount') && (
             <p className="body-text-sm text-red-500 mt-1">
               {errorFor('amount')}
@@ -264,6 +291,28 @@ export default function BudgetItemRow({
         </div>
 
         <div className="flex items-center justify-end gap-2 md:pt-1">
+          {/* "הזכר לי מאוחר יותר" toggle */}
+          <button
+            type="button"
+            onClick={() => onPatch({ needsReview: !row.needsReview })}
+            aria-pressed={row.needsReview}
+            aria-label={row.needsReview ? 'הסר סימון לבדיקה' : 'סמן לבדיקה מאוחר יותר'}
+            title={row.needsReview ? 'מסומן לבדיקה — לחץ לביטול' : 'הזכר לי מאוחר יותר'}
+            className={`p-2 rounded-lg transition-colors duration-200 ${
+              row.needsReview
+                ? 'text-amber-600 bg-amber-100 hover:bg-amber-200'
+                : 'text-slate-400 hover:text-amber-500 hover:bg-amber-50'
+            }`}
+          >
+            <Bell size={18} strokeWidth={ICON_STROKE} className={row.needsReview ? 'fill-amber-200' : ''} />
+          </button>
+
+          {/* יעד שלנו popover */}
+          <TargetPopover
+            targetAmount={row.targetAmount}
+            onSave={(value) => onPatch({ targetAmount: value })}
+          />
+
           {onAdvancedModeRequest && row.serverId === null && (
             <button
               type="button"
