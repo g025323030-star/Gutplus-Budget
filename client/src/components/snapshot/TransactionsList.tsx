@@ -34,18 +34,11 @@ const currencyFormatter = new Intl.NumberFormat('he-IL', {
   maximumFractionDigits: 0,
 });
 
-const dateFormatter = new Intl.DateTimeFormat('he-IL', {
-  day: '2-digit',
-  month: '2-digit',
-  year: 'numeric',
-});
-
 interface RowEntry {
   id: string;
   description: string;
   categoryName: string;
   amount: number;
-  date: string;
 }
 
 const buildRows = (
@@ -73,7 +66,6 @@ const buildRows = (
         description: tx.description || '—',
         categoryName: category?.name ?? 'ללא קטגוריה',
         amount: parseFloat(tx.amount) || 0,
-        date: tx.date,
       };
     })
     .sort((a, b) => b.amount - a.amount)
@@ -86,13 +78,43 @@ interface MonthlyTotals {
   expense: number;
 }
 
+const ALL_MONTHS = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12];
+
+// Resolves which months an item contributes to (and how much per month) from
+// its forecast fields, since items no longer carry a calendar date.
+const monthlyContribution = (
+  tx: BudgetItem,
+): { months: number[]; perMonth: number } => {
+  const amount = parseFloat(tx.amount) || 0;
+  // Installment payments and one-time items sit in a single month.
+  if (tx.installmentGroupId != null || tx.isOneTime) {
+    return tx.assignedMonth != null
+      ? { months: [tx.assignedMonth], perMonth: amount }
+      : { months: [], perMonth: 0 };
+  }
+  // Bi-monthly items recur on months matching their base month's parity.
+  if (tx.baseMonth != null) {
+    return {
+      months: ALL_MONTHS.filter((m) => m % 2 === tx.baseMonth! % 2),
+      perMonth: amount,
+    };
+  }
+  // Yearly items: a single assigned month, otherwise spread across the year.
+  if (tx.frequency === CategoryFrequency.YEARLY) {
+    return tx.assignedMonth != null
+      ? { months: [tx.assignedMonth], perMonth: amount }
+      : { months: ALL_MONTHS, perMonth: amount / 12 };
+  }
+  // Plain monthly items recur every month.
+  return { months: ALL_MONTHS, perMonth: amount };
+};
+
 const buildMonthlyTotals = (
   transactions: BudgetItem[],
   categoryById: Map<string, Category>,
-  year: number,
 ): MonthlyTotals[] => {
-  const totals: MonthlyTotals[] = Array.from({ length: 12 }, (_, i) => ({
-    month: i + 1,
+  const totals: MonthlyTotals[] = ALL_MONTHS.map((month) => ({
+    month,
     income: 0,
     expense: 0,
   }));
@@ -102,16 +124,14 @@ const buildMonthlyTotals = (
     const category = categoryById.get(tx.categoryId);
     if (!category) return;
 
-    const txDate = new Date(tx.date);
-    if (txDate.getFullYear() !== year) return;
-    const monthIdx = txDate.getMonth();
-    const amount = parseFloat(tx.amount) || 0;
-
-    if (category.type === CategoryType.INCOME) {
-      totals[monthIdx].income += amount;
-    } else if (category.type === CategoryType.EXPENSE) {
-      totals[monthIdx].expense += amount;
-    }
+    const { months, perMonth } = monthlyContribution(tx);
+    months.forEach((m) => {
+      if (category.type === CategoryType.INCOME) {
+        totals[m - 1].income += perMonth;
+      } else if (category.type === CategoryType.EXPENSE) {
+        totals[m - 1].expense += perMonth;
+      }
+    });
   });
 
   return totals;
@@ -143,7 +163,7 @@ function TopList({ title, rows, amountClass, icon }: TopListProps) {
               <div className="min-w-0 flex-1">
                 <p className="body-text truncate">{row.description}</p>
                 <p className="body-text-sm text-slate-500">
-                  {row.categoryName} · {dateFormatter.format(new Date(row.date))}
+                  {row.categoryName}
                 </p>
               </div>
               <span className={`body-text font-semibold ${amountClass}`}>
@@ -246,9 +266,9 @@ export default function TransactionsList({
   const monthlyTotals = useMemo(
     () =>
       mode === 'yearly'
-        ? buildMonthlyTotals(transactions, categoryById, year)
+        ? buildMonthlyTotals(transactions, categoryById)
         : [],
-    [mode, transactions, categoryById, year],
+    [mode, transactions, categoryById],
   );
 
   return (

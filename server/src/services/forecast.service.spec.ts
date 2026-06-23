@@ -90,7 +90,6 @@ function makeItem(overrides: Partial<BudgetItem> = {}): BudgetItem {
     id: 'item-1',
     amount: '100.00',
     targetAmount: null,
-    date: new Date(2026, 5, 1), // June 2026
     description: 'test',
     needsReview: false,
     frequency: CategoryFrequency.MONTHLY,
@@ -247,15 +246,15 @@ describe('ForecastService.computeForecast', () => {
   // One-time item drops off in future years
   // -------------------------------------------------------------------------
 
-  it('one-time item present this year drops out of a window month in the next year', async () => {
+  it('one-time item is included only in its assignedMonth within the window', async () => {
     const now = new Date();
     const currentMonth = now.getMonth() + 1;
     const currentYear = now.getFullYear();
 
-    // Create a one-time item in the current month+year
+    // A one-time item anchored to the current month via assignedMonth
     const oneTimeItem = makeItem({
       isOneTime: true,
-      date: new Date(currentYear, currentMonth - 1, 1),
+      assignedMonth: currentMonth,
       frequency: CategoryFrequency.YEARLY,
       amount: '999.00',
       targetAmount: null,
@@ -265,17 +264,15 @@ describe('ForecastService.computeForecast', () => {
 
     const result = await service.computeForecast('hh-1');
 
-    // The first month in the window (current month+year) should include the item
+    // The first month in the window (current month) should include the item
     expect(result[0].month).toBe(currentMonth);
     expect(result[0].year).toBe(currentYear);
     expect(result[0].expenses.yearly).toBe(999);
 
-    // Any month in the next year with the same month number should NOT include it
-    const nextYearSameMonth = result.find(
-      r => r.month === currentMonth && r.year === currentYear + 1,
-    );
-    if (nextYearSameMonth) {
-      expect(nextYearSameMonth.expenses.yearly).toBe(0);
+    // Any other month in the window must NOT include it
+    const otherMonth = result.find(r => r.month !== currentMonth);
+    if (otherMonth) {
+      expect(otherMonth.expenses.yearly).toBe(0);
     }
   });
 
@@ -304,7 +301,18 @@ describe('ForecastService.computeForecast', () => {
     expect(result).toHaveLength(12);
     for (const month of result) {
       expect(month.incomes).toEqual({ monthly: 0, yearly: 0 });
-      expect(month.expenses).toEqual({ monthly: 0, yearly: 0, holidays: 0, installments: 0 });
+      expect(month.expenses).toEqual({
+        monthly: 0,
+        yearly: 0,
+        yearlySpread: 0,
+        yearlyThisMonth: 0,
+        holidays: 0,
+        installments: 0,
+        breakouts: [
+          { name: 'מעשרות וצדקה', amount: 0 },
+          { name: 'ירידת פריון עבודה', amount: 0 },
+        ],
+      });
       expect(month.debtRepayments).toBe(0);
       expect(month.balanceBeforeDebts).toBe(0);
       expect(month.balanceAfterDebts).toBe(0);

@@ -21,6 +21,7 @@ interface CategoryComboboxProps {
   onChange: (categoryId: string | null) => void;
   onBlurOutside?: () => void;
   onAddCategoryRequest?: () => void;
+  autoOpen?: boolean;
 }
 
 const INPUT_CLASS =
@@ -37,6 +38,7 @@ const CategoryCombobox = forwardRef<HTMLDivElement, CategoryComboboxProps>(
       onChange,
       onBlurOutside,
       onAddCategoryRequest,
+      autoOpen = false,
     },
     ref,
   ) {
@@ -53,6 +55,15 @@ const CategoryCombobox = forwardRef<HTMLDivElement, CategoryComboboxProps>(
       bottom?: number;
       maxHeight: number;
     } | null>(null);
+
+    // autoOpen: פתיחת הרשימה בטעינה (רק כשה-prop אמת)
+    useEffect(() => {
+      if (!autoOpen) return;
+      setIsOpen(true);
+      const t = window.setTimeout(() => inputRef.current?.focus(), 0);
+      return () => window.clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []);
 
     // מחזירים את שליפת הקטגוריה הספציפית שנבחרה כרגע (בשביל להציג את השם שלה כשהתפריט סגור)
     const selectedCategory = useMemo(
@@ -174,6 +185,8 @@ const CategoryCombobox = forwardRef<HTMLDivElement, CategoryComboboxProps>(
       } else if (event.key === 'Escape') {
         setIsOpen(false);
         setQuery('');
+        // Signal "left the field" so label-mode callers can collapse back to the chip.
+        onBlurOutside?.();
       }
     };
 

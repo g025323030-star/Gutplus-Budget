@@ -1,21 +1,21 @@
 import { PartyPopper } from 'lucide-react';
 import { HOLIDAY_EXPENSE_TEMPLATES } from '@gutplus/shared';
-import type { Category, BudgetItem } from '@gutplus/shared';
+import type { BudgetItem, Holiday } from '@gutplus/shared';
 import { ICON_STROKE } from '../../constants/ui';
 import HolidayAccordion from './HolidayAccordion';
 
 interface HolidayExpensesSectionProps {
   year: number;
-  categories: Category[];
   householdId: string;
   onTransactionsCreated: (transactions: BudgetItem[]) => void;
+  totalsByHoliday: Partial<Record<Holiday, number>>;
 }
 
 export default function HolidayExpensesSection({
   year,
-  categories,
   householdId,
   onTransactionsCreated,
+  totalsByHoliday,
 }: HolidayExpensesSectionProps) {
   return (
     <section className="space-y-4">
@@ -40,9 +40,9 @@ export default function HolidayExpensesSection({
             key={template.holiday}
             template={template}
             year={year}
-            categories={categories}
             householdId={householdId}
             onTransactionsCreated={onTransactionsCreated}
+            totalAmount={totalsByHoliday[template.holiday] ?? 0}
           />
         ))}
       </div>

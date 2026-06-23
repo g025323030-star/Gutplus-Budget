@@ -105,7 +105,6 @@ function makeItem(overrides: Partial<BudgetItem> = {}): BudgetItem {
   return {
     id: 'item-1',
     amount: '100.00',
-    date: new Date(2026, 5, 1), // June 2026 (month 6)
     description: 'test',
     needsReview: false,
     frequency: CategoryFrequency.MONTHLY,
@@ -185,28 +184,28 @@ describe('isItemIncludedInMonth', () => {
   });
 
   describe('isOneTime', () => {
-    it('isOneTime item included in its exact month+year', () => {
+    it('isOneTime item included in its assignedMonth', () => {
       const item = makeItem({
         isOneTime: true,
-        date: new Date(2026, 5, 15), // June 2026
+        assignedMonth: 6,
         frequency: CategoryFrequency.YEARLY,
       });
       expect(isItemIncludedInMonth(item, 6, 2026)).toBe(true);
     });
 
-    it('isOneTime item excluded in same month of a different year', () => {
+    it('isOneTime item is anchored to month only — included in its month every year', () => {
       const item = makeItem({
         isOneTime: true,
-        date: new Date(2026, 5, 15), // June 2026
+        assignedMonth: 6,
         frequency: CategoryFrequency.YEARLY,
       });
-      expect(isItemIncludedInMonth(item, 6, 2027)).toBe(false);
+      expect(isItemIncludedInMonth(item, 6, 2027)).toBe(true);
     });
 
-    it('isOneTime item excluded in a different month of the same year', () => {
+    it('isOneTime item excluded in a different month', () => {
       const item = makeItem({
         isOneTime: true,
-        date: new Date(2026, 5, 15), // June 2026
+        assignedMonth: 6,
         frequency: CategoryFrequency.YEARLY,
       });
       expect(isItemIncludedInMonth(item, 7, 2026)).toBe(false);
@@ -214,28 +213,27 @@ describe('isItemIncludedInMonth', () => {
   });
 
   describe('installment rows', () => {
-    it('installment row included in its own date month at full amount (not divided)', () => {
+    it('installment row included in its assignedMonth at full amount (not divided)', () => {
       const item = makeItem({
         installmentGroupId: 'grp-1',
         installmentsTotal: 12,
         installmentIndex: 3,
-        date: new Date(2026, 5, 1), // June 2026
+        assignedMonth: 6,
         frequency: CategoryFrequency.MONTHLY,
       });
       expect(isItemIncludedInMonth(item, 6, 2026)).toBe(true);
     });
 
-    it('installment row excluded in different months', () => {
+    it('installment row excluded in a different month', () => {
       const item = makeItem({
         installmentGroupId: 'grp-1',
         installmentsTotal: 12,
         installmentIndex: 3,
-        date: new Date(2026, 5, 1), // June 2026
+        assignedMonth: 6,
         frequency: CategoryFrequency.MONTHLY,
       });
       expect(isItemIncludedInMonth(item, 5, 2026)).toBe(false);
       expect(isItemIncludedInMonth(item, 7, 2026)).toBe(false);
-      expect(isItemIncludedInMonth(item, 6, 2025)).toBe(false);
     });
   });
 
@@ -286,7 +284,7 @@ describe('isItemIncludedInMonth', () => {
 
   describe('Dec→Jan rollover', () => {
     it('a monthly item included in December year N is also included January year N+1', () => {
-      const item = makeItem({ frequency: CategoryFrequency.MONTHLY, date: new Date(2025, 11, 1) });
+      const item = makeItem({ frequency: CategoryFrequency.MONTHLY });
       expect(isItemIncludedInMonth(item, 12, 2025)).toBe(true);
       expect(isItemIncludedInMonth(item, 1, 2026)).toBe(true);
     });
@@ -401,7 +399,7 @@ describe('SummaryService.computeSummary', () => {
       installmentGroupId: 'grp-install',
       installmentsTotal: 12,
       installmentIndex: 3,
-      date: new Date(2026, 5, 1), // June 2026
+      assignedMonth: 6, // June
       frequency: CategoryFrequency.MONTHLY,
       category: makeCategory({ type: CategoryType.EXPENSE }),
     });
@@ -502,6 +500,76 @@ describe('SummaryService.computeSummary', () => {
   });
 
   // -------------------------------------------------------------------------
+  // Category breakouts (מעשרות) + yearly spread/this-month split
+  // -------------------------------------------------------------------------
+
+  it('pulls מעשרות subtree into breakouts: excluded from general, still in balance', async () => {
+    const tithesParent = makeCategory({
+      id: 'cat-tithes-parent',
+      name: 'מעשרות וצדקה',
+      type: CategoryType.EXPENSE,
+      parentCategory: null,
+    });
+    const tithesSub = makeCategory({
+      id: 'cat-tithes-sub',
+      name: 'מעשרות',
+      type: CategoryType.EXPENSE,
+      parentCategory: { id: 'cat-tithes-parent' } as any,
+    });
+
+    const income = makeItem({
+      id: 'item-income',
+      amount: '10000.00',
+      frequency: CategoryFrequency.MONTHLY,
+      category: makeCategory({ type: CategoryType.INCOME }),
+    });
+    const general = makeItem({
+      id: 'item-general',
+      amount: '1000.00',
+      frequency: CategoryFrequency.MONTHLY,
+      category: makeCategory({ type: CategoryType.EXPENSE }),
+    });
+    const tithes = makeItem({
+      id: 'item-tithes',
+      amount: '500.00',
+      frequency: CategoryFrequency.MONTHLY,
+      category: tithesSub,
+    });
+
+    setupItems([income, general, tithes], [tithesParent, tithesSub]);
+
+    const result = await service.computeSummary('hh-1', 6, 2026);
+    const tithesRow = result.expenses.breakouts.find(b => b.name === 'מעשרות וצדקה');
+    expect(tithesRow?.amount).toBe(500);
+    expect(result.expenses.monthly).toBe(1000);      // tithes carved out of general
+    expect(result.balanceBeforeDebts).toBe(8500);    // 10000 - 1000 - 500
+    expect(result.balanceAfterDebts).toBe(8500);     // no debt
+  });
+
+  it('splits yearly into spread (÷12) and this-month buckets; yearly = their sum', async () => {
+    const spread = makeItem({
+      id: 'item-spread',
+      amount: '1200.00',
+      frequency: CategoryFrequency.YEARLY,
+      assignedMonth: null,
+      category: makeCategory({ type: CategoryType.EXPENSE }),
+    });
+    const assigned = makeItem({
+      id: 'item-assigned',
+      amount: '600.00',
+      frequency: CategoryFrequency.YEARLY,
+      assignedMonth: 6,
+      category: makeCategory({ type: CategoryType.EXPENSE }),
+    });
+    setupItems([spread, assigned]);
+
+    const result = await service.computeSummary('hh-1', 6, 2026);
+    expect(result.expenses.yearlySpread).toBe(100);     // 1200 / 12
+    expect(result.expenses.yearlyThisMonth).toBe(600);
+    expect(result.expenses.yearly).toBe(700);
+  });
+
+  // -------------------------------------------------------------------------
   // endDate exclusion
   // -------------------------------------------------------------------------
 
@@ -563,7 +631,18 @@ describe('SummaryService.computeSummary', () => {
     const result = await service.computeSummary('hh-1', 6, 2026);
     expect(result).toEqual({
       incomes: { monthly: 0, yearly: 0 },
-      expenses: { monthly: 0, yearly: 0, holidays: 0, installments: 0 },
+      expenses: {
+        monthly: 0,
+        yearly: 0,
+        yearlySpread: 0,
+        yearlyThisMonth: 0,
+        holidays: 0,
+        installments: 0,
+        breakouts: [
+          { name: 'מעשרות וצדקה', amount: 0 },
+          { name: 'ירידת פריון עבודה', amount: 0 },
+        ],
+      },
       debtRepayments: 0,
       balanceBeforeDebts: 0,
       balanceAfterDebts: 0,

@@ -22,43 +22,9 @@ import {
 export type CreateBudgetItemServiceResult =
   | { kind: 'budgetItems'; data: BudgetItemShared[] };
 
-const daysInMonth = (year: number, monthIndex: number): number =>
-  new Date(year, monthIndex + 1, 0).getDate();
-
-const addMonthsClamped = (date: Date, months: number): Date => {
-  const year = date.getFullYear();
-  const monthIndex = date.getMonth();
-  const day = date.getDate();
-  const targetMonthIndex = monthIndex + months;
-  const targetYear = year + Math.floor(targetMonthIndex / 12);
-  const normalizedMonthIndex = ((targetMonthIndex % 12) + 12) % 12;
-  const clampedDay = Math.min(day, daysInMonth(targetYear, normalizedMonthIndex));
-  return new Date(
-    targetYear,
-    normalizedMonthIndex,
-    clampedDay,
-    date.getHours(),
-    date.getMinutes(),
-    date.getSeconds(),
-    date.getMilliseconds(),
-  );
-};
-
-const stepMonthsForFrequency = (frequency: TransactionFrequency): number => {
-  switch (frequency) {
-    case TransactionFrequency.MONTHLY:
-      return 1;
-    case TransactionFrequency.BI_MONTHLY:
-      return 2;
-    default:
-      return 1;
-  }
-};
-
 const toBudgetItemShared = (row: BudgetItem): BudgetItemShared => ({
   id: row.id,
   amount: row.amount,
-  date: row.date instanceof Date ? row.date.toISOString() : (row.date as unknown as string),
   description: row.description,
   needsReview: row.needsReview,
   frequency: row.frequency,
@@ -190,70 +156,91 @@ export class BudgetItemService {
     if (!dto.recurringFrequency) {
       throw new Error('recurringFrequency is required for recurring budget items');
     }
-    if (!dto.date) {
-      throw new Error('date is required for recurring budget items');
-    }
 
-    const startDate = new Date(dto.date);
     const endDate = new Date(dto.endDate as string);
-    const step = stepMonthsForFrequency(dto.recurringFrequency);
 
-    const queryRunner = AppDataSource.createQueryRunner();
-    await queryRunner.connect();
-    await queryRunner.startTransaction();
-    try {
-      await this.assertReferencesExist(queryRunner.manager, {
-        householdId: dto.householdId,
-        categoryId: dto.categoryId,
-        accountId: dto.accountId,
-      });
+    // The summary/forecast engine already expands a single monthly/bi-monthly
+    // row across every month and excludes it once endDate is past — so we
+    // persist a SINGLE row carrying endDate rather than materializing one row
+    // per month. For BI_MONTHLY we anchor parity via baseMonth (the start
+    // month); MONTHLY rows leave baseMonth null (included every month).
+    const startMonth = dto.assignedMonth ?? new Date().getMonth() + 1;
+    const baseMonth =
+      dto.recurringFrequency === TransactionFrequency.BI_MONTHLY
+        ? startMonth
+        : null;
 
-      const repo = queryRunner.manager.getRepository(BudgetItem);
-      const created: BudgetItem[] = [];
-      let stepIndex = 0;
-      while (true) {
-        const current = addMonthsClamped(startDate, step * stepIndex);
-        if (current.getTime() > endDate.getTime()) break;
-        const entity = repo.create({
-          amount: dto.amount,
-          date: current,
-          description: dto.description,
-          frequency: dto.frequency,
-          installmentsTotal: null,
-          installmentIndex: null,
-          installmentGroupId: null,
-          endDate: endDate,
-          household: { id: dto.householdId } as any,
-          category: dto.categoryId ? ({ id: dto.categoryId } as any) : null,
-          account: dto.accountId ? ({ id: dto.accountId } as any) : null,
-          ...this.buildBaseFields(dto),
-        });
-        const saved = await repo.save(entity);
-        created.push(saved);
-        stepIndex += 1;
-      }
+    await this.assertReferencesExist(this.budgetItemRepository.manager, {
+      householdId: dto.householdId,
+      categoryId: dto.categoryId,
+      accountId: dto.accountId,
+    });
 
-      await queryRunner.commitTransaction();
-      return created.map(toBudgetItemShared);
-    } catch (err) {
-      await queryRunner.rollbackTransaction();
-      throw err;
-    } finally {
-      await queryRunner.release();
+    const entity = this.budgetItemRepository.create({
+      amount: dto.amount,
+      description: dto.description,
+      frequency: dto.frequency,
+      installmentsTotal: null,
+      installmentIndex: null,
+      installmentGroupId: null,
+      endDate: endDate,
+      household: { id: dto.householdId } as any,
+      category: dto.categoryId ? ({ id: dto.categoryId } as any) : null,
+      account: dto.accountId ? ({ id: dto.accountId } as any) : null,
+      ...this.buildBaseFields(dto),
+      baseMonth,
+    });
+    const saved = await this.budgetItemRepository.save(entity);
+    return [toBudgetItemShared(saved)];
+  }
+
+  /**
+   * Splits a decimal amount string (e.g. "3000.00") evenly across `count`
+   * installments using integer-cent arithmetic to avoid floating-point error.
+   *
+   * Formula:
+   *   totalCents = round(amount * 100)
+   *   base       = floor(totalCents / count)          // cents every installment gets
+   *   remainder  = totalCents - base * count           // 0 ≤ remainder < count
+   *
+   * The first `remainder` installments (index 1..remainder) receive one extra
+   * cent so that sum(shares) === totalCents exactly.
+   *
+   * Returns an array of length `count` where element [i-1] is the share for
+   * installment index i, formatted to exactly 2 decimal places.
+   *
+   * Example: "3000.00" / 3 → ["1000.00", "1000.00", "1000.00"]
+   * Example: "1000.00" / 3 → ["333.34", "333.33", "333.33"]
+   */
+  private splitAmountIntoInstallments(amount: string, count: number): string[] {
+    // Parse to integer cents; Math.round handles any trailing float noise.
+    const totalCents = Math.round(parseFloat(amount) * 100);
+    const base = Math.floor(totalCents / count);
+    const remainder = totalCents - base * count;
+
+    const shares: string[] = [];
+    for (let i = 1; i <= count; i++) {
+      // First `remainder` installments get one extra cent.
+      const cents = i <= remainder ? base + 1 : base;
+      shares.push((cents / 100).toFixed(2));
     }
+    return shares;
   }
 
   private async createInstallments(
     dto: CreateBudgetItemDto,
   ): Promise<BudgetItemShared[]> {
-    if (!dto.date) {
-      throw new Error('date is required for installment budget items');
-    }
-
     const total = dto.installmentsTotal as number;
     const payloadIndex = dto.installmentIndex as number;
     const groupId = randomUUID();
-    const payloadDate = new Date(dto.date);
+    // Each installment is anchored to a month of the year via assignedMonth.
+    // The plan's start month comes from the payload (defaulting to the current
+    // month); each row steps forward from it, wrapping around 1–12.
+    const startMonth = dto.assignedMonth ?? new Date().getMonth() + 1;
+
+    // Split the total purchase price into per-installment shares once so that
+    // each row stores only its own share (not the full purchase price).
+    const shares = this.splitAmountIntoInstallments(dto.amount, total);
 
     const queryRunner = AppDataSource.createQueryRunner();
     await queryRunner.connect();
@@ -269,10 +256,10 @@ export class BudgetItemService {
       const created: BudgetItem[] = [];
       for (let i = 1; i <= total; i++) {
         const offset = i - payloadIndex;
-        const installmentDate = addMonthsClamped(payloadDate, offset);
+        const installmentMonth = (((startMonth - 1 + offset) % 12) + 12) % 12 + 1;
         const entity = repo.create({
-          amount: dto.amount,
-          date: installmentDate,
+          // shares is 0-indexed; installment index i maps to shares[i-1].
+          amount: shares[i - 1],
           description: dto.description,
           frequency: dto.frequency,
           installmentsTotal: total,
@@ -283,6 +270,7 @@ export class BudgetItemService {
           category: dto.categoryId ? ({ id: dto.categoryId } as any) : null,
           account: dto.accountId ? ({ id: dto.accountId } as any) : null,
           ...this.buildBaseFields(dto),
+          assignedMonth: installmentMonth,
         });
         const saved = await repo.save(entity);
         created.push(saved);
@@ -309,13 +297,14 @@ export class BudgetItemService {
 
     const budgetItem = this.budgetItemRepository.create({
       amount: dto.amount,
-      date: dto.date ? new Date(dto.date) : new Date(),
       description: dto.description,
       frequency: dto.frequency,
       installmentsTotal: null,
       installmentIndex: null,
       installmentGroupId: null,
-      endDate: null,
+      // A single projected item may carry an endDate ("last billing month"):
+      // the summary/forecast engine stops including it once endDate is past.
+      endDate: dto.endDate ? new Date(dto.endDate) : null,
       household: { id: dto.householdId } as any,
       category: dto.categoryId ? ({ id: dto.categoryId } as any) : null,
       account: dto.accountId ? ({ id: dto.accountId } as any) : null,
@@ -389,9 +378,6 @@ export class BudgetItemService {
 
     if (updateBudgetItemDto.amount !== undefined) {
       existing.amount = updateBudgetItemDto.amount;
-    }
-    if (updateBudgetItemDto.date !== undefined) {
-      existing.date = new Date(updateBudgetItemDto.date);
     }
     if (updateBudgetItemDto.description !== undefined) {
       existing.description = updateBudgetItemDto.description;

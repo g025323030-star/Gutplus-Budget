@@ -26,10 +26,6 @@ export class BudgetItem {
   })
   amount!: string;
 
-  @Index('IDX_budget_item_date')
-  @Column({ name: 'date', type: 'timestamptz' })
-  date!: Date;
-
   @Column({ name: 'description', type: 'text' })
   description!: string;
 

@@ -6,10 +6,12 @@ import LoginPage from './pages/LoginPage';
 import SnapshotPage from './pages/SnapshotPage';
 import ExpensesPage from './pages/ExpensesPage';
 import IncomePage from './pages/IncomePage';
+import BudgetPlannerContainer from './pages/BudgetPlanner/BudgetPlannerContainer';
 import WelcomePage from './pages/WelcomePage';
 import './styles/index.css';
 
 function App() {
+  
   return (
     <BrowserRouter>
       <AuthProvider>
@@ -22,6 +24,7 @@ function App() {
               <Route path="/snapshot" element={<SnapshotPage />} />
               <Route path="/expenses" element={<ExpensesPage />} />
               <Route path="/income" element={<IncomePage />} />
+              <Route path="/budget" element={<BudgetPlannerContainer />} />
             </Route>
             <Route path="/dashboard" element={<Navigate to="/snapshot" replace />} />
             <Route path="/" element={<Navigate to="/snapshot" replace />} />

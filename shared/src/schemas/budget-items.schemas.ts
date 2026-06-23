@@ -23,7 +23,6 @@ const monthSchema = z.number().int().min(1).max(12);
 export const budgetItemEntitySchema = z.object({
   id: uuidSchema,
   amount: decimalStringSchema,
-  date: isoDateStringSchema,
   description: z.string().min(1),
   needsReview: z.boolean(),
   frequency: z.nativeEnum(CategoryFrequency),
@@ -46,7 +45,6 @@ export const budgetItemEntitySchema = z.object({
 
 const createBudgetItemBaseSchema = z.object({
   amount: decimalStringSchema,
-  date: dateInputSchema.optional(),
   description: z.string().min(1),
   needsReview: z.boolean().optional(),
   frequency: z.nativeEnum(CategoryFrequency),
@@ -122,40 +120,25 @@ export const createBudgetItemSchema = createBudgetItemBaseSchema.superRefine(
       });
     }
 
-    if (value.endDate !== undefined && value.isRecurring !== true) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        message: 'endDate can only be provided when isRecurring is true',
-        path: ['endDate'],
-      });
-    }
-
-    if (value.endDate !== undefined && value.date !== undefined) {
-      const endMs = Date.parse(value.endDate);
-      const startMs = Date.parse(value.date);
-      if (!Number.isNaN(endMs) && !Number.isNaN(startMs) && endMs < startMs) {
-        ctx.addIssue({
-          code: z.ZodIssueCode.custom,
-          message: 'endDate cannot be earlier than date',
-          path: ['endDate'],
-        });
-      }
-    }
-
-    // assignedMonth and baseMonth: range already enforced by monthSchema (1–12)
-    // isOneTime rules
+    // assignedMonth and baseMonth: range already enforced by monthSchema (1–12).
+    // isOneTime rules — a one-time item is anchored to a single month of the
+    // year via assignedMonth (there is no per-row calendar date anymore).
     if (value.isOneTime === true) {
-      if (value.date === undefined) {
+      if (value.assignedMonth === undefined || value.assignedMonth === null) {
         ctx.addIssue({
           code: z.ZodIssueCode.custom,
-          message: 'date is required when isOneTime is true',
-          path: ['date'],
+          message: 'assignedMonth is required when isOneTime is true',
+          path: ['assignedMonth'],
         });
       }
-      if (value.assignedMonth !== undefined && value.assignedMonth !== null) {
+    }
+
+    // HASIDIS_EVENT has no fixed Hebrew date — the user assigns the month manually.
+    if (value.holiday === Holiday.HASIDIS_EVENT) {
+      if (value.assignedMonth === undefined || value.assignedMonth === null) {
         ctx.addIssue({
           code: z.ZodIssueCode.custom,
-          message: 'assignedMonth must be absent or null when isOneTime is true',
+          message: 'assignedMonth is required when holiday is HASIDIS_EVENT',
           path: ['assignedMonth'],
         });
       }

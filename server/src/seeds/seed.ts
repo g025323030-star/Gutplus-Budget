@@ -202,14 +202,10 @@ async function seedDatabase() {
     // Create Budget Items
     console.log('💳 Creating budget items...');
     const budgetItemRepository = AppDataSource.getRepository(BudgetItem);
-    const today = new Date();
-    const sevenDaysAgo = new Date(today.getTime() - 7 * 24 * 60 * 60 * 1000);
-    const thirtyDaysAgo = new Date(today.getTime() - 30 * 24 * 60 * 60 * 1000);
 
     await budgetItemRepository.save([
       {
         amount: '450',
-        date: today,
         description: 'קנייה במכולת',
         needsReview: false,
         frequency: CategoryFrequency.MONTHLY,
@@ -220,7 +216,6 @@ async function seedDatabase() {
       },
       {
         amount: '180',
-        date: sevenDaysAgo,
         description: 'בדק מים וחשמל',
         needsReview: false,
         frequency: CategoryFrequency.MONTHLY,
@@ -231,7 +226,6 @@ async function seedDatabase() {
       },
       {
         amount: '5000',
-        date: thirtyDaysAgo,
         description: 'שכר חודשי',
         needsReview: false,
         frequency: CategoryFrequency.MONTHLY,
@@ -242,7 +236,6 @@ async function seedDatabase() {
       },
       {
         amount: '125',
-        date: today,
         description: 'תשלום כרטיס אשראי',
         needsReview: false,
         frequency: CategoryFrequency.MONTHLY,

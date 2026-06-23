@@ -6,7 +6,14 @@
       "Bash(awk '/getBudgetItems/{print NR\": \"$0}' \"/Users/avivmali/Documents/Gutplus Budget/client/src/services/budget-items.service.ts\")",
       "Bash(node -e ' *)",
       "Bash(awk '/CreateBudgetItemResult|kind.*budgetItems/{print NR\": \"$0}' \"/Users/avivmali/Documents/Gutplus Budget/shared/src/contracts/users.contracts.ts\")",
-      "Bash(awk '/CreateBudgetItemResult|kind.*budgetItems/{print NR\": \"$0}' \"/Users/avivmali/Documents/Gutplus Budget/shared/src/types/household.types.ts\")"
+      "Bash(awk '/CreateBudgetItemResult|kind.*budgetItems/{print NR\": \"$0}' \"/Users/avivmali/Documents/Gutplus Budget/shared/src/types/household.types.ts\")",
+      "Read(//Users/avivmali/Library/Caches/**)",
+      "Bash(npm cache *)",
+      "Bash(lsof -ti:3000 -ti:5173)",
+      "Bash(npm run *)",
+      "Bash(echo \"build exit: $?\")",
+      "Bash(awk '/toEqual\\\\\\(\\\\{|expenses: \\\\{|incomes: \\\\{|balanceAfterDebts|debtRepayments:/{print NR\": \"$0}' src/services/summary.service.spec.ts)",
+      "Bash(awk '/toEqual\\\\\\(|expenses: \\\\{|holidays: 0|installments: 0/{print NR\": \"$0}' src/services/forecast.service.spec.ts)"
     ]
   }
 }

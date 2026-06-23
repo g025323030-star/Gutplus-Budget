@@ -1,11 +1,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { motion } from 'framer-motion';
-import { AlertCircle, Calendar, ChevronDown, TrendingUp } from 'lucide-react';
+import { AlertCircle, TrendingUp } from 'lucide-react';
 import { CategoryFrequency, CategoryType, CurrencyCode } from '@gutplus/shared';
 import type { Category, BudgetItemListItem } from '@gutplus/shared';
 import { ICON_STROKE } from '../constants/ui';
 import { useCurrentUser } from '../hooks/useCurrentUser';
-import { getBudgetItems, createBudgetItem } from '../services/budget-items.service';
+import { useSuggestedRowsModal } from '../hooks/useSuggestedRowsModal';
+import { getBudgetItems } from '../services/budget-items.service';
 import { getCategories } from '../services/categories.service';
 import BudgetItemTable from '../components/budget-items/BudgetItemTable';
 import AdvancedModeModal from '../components/budget-items/AdvancedModeModal';
@@ -14,21 +15,6 @@ import CategoryFormModal from '../components/budget-items/CategoryFormModal';
 import type { DraftRow } from '../components/budget-items/types';
 import { snapshotOf } from '../components/budget-items/types';
 import { SuggestedRowsModal } from '../components/expenses/SuggestedRowsModal';
-
-const HEBREW_MONTHS = [
-  'ינואר',
-  'פברואר',
-  'מרץ',
-  'אפריל',
-  'מאי',
-  'יוני',
-  'יולי',
-  'אוגוסט',
-  'ספטמבר',
-  'אוקטובר',
-  'נובמבר',
-  'דצמבר',
-];
 
 const PAGE_VARIANTS = {
   hidden: { opacity: 0 },
@@ -62,7 +48,6 @@ const toDraftRow = (item: BudgetItemListItem): DraftRow | null => {
   if (isProjectionItem(item)) return null;
   const amountStr =
     typeof item.amount === 'string' ? item.amount : String(item.amount);
-  const dateOnly = item.date ? item.date.slice(0, 10) : '';
   const installmentsTotal = item.installmentsTotal ?? null;
   const base: DraftRow = {
     localId: newLocalId(),
@@ -74,7 +59,6 @@ const toDraftRow = (item: BudgetItemListItem): DraftRow | null => {
     description: item.description,
     categoryId: item.categoryId ?? null,
     amount: amountStr,
-    date: dateOnly,
     status: 'idle',
     errorMessage: null,
     lastSavedSnapshot: null,
@@ -108,10 +92,10 @@ const INCOME_TEMPLATE_DESCRIPTIONS: string[] = [
 
 export default function IncomePage() {
   const now = new Date();
-  const [selectedMonth, setSelectedMonth] = useState<number>(
-    now.getMonth() + 1,
-  );
-  const [selectedYear, setSelectedYear] = useState<number>(now.getFullYear());
+  // The page no longer exposes a month/year picker — each row is a recurring
+  // monthly average. We anchor month-dependent logic to the current month.
+  const selectedMonth = now.getMonth() + 1;
+  const selectedYear = now.getFullYear();
   const [activeTab, setActiveTab] = useState<'monthly' | 'yearly'>('monthly');
   const [rows, setRows] = useState<DraftRow[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
@@ -126,10 +110,6 @@ export default function IncomePage() {
     string | null
   >(null);
 
-  const [isSuggestionModalOpen, setIsSuggestionModalOpen] = useState(false);
-  const [suggestedRows, setSuggestedRows] = useState<DraftRow[]>([]);
-  const [isSavingTemplates, setIsSavingTemplates] = useState(false);
-
   const inlineInjectedRef = useRef(false);
 
   const {
@@ -140,6 +120,13 @@ export default function IncomePage() {
   } = useCurrentUser();
 
   const isFirstUse = !incomeTemplatesInitialized;
+
+  const suggestions = useSuggestedRowsModal({
+    householdId,
+    validRowFilter: (row) => Boolean(row.amount) && Number(row.amount) > 0 && Boolean(row.categoryId),
+    buildPayloadExtras: (row) => ({ assignedMonth: row.assignedMonth ?? undefined, isOneTime: row.isOneTime || undefined }),
+    onSaved: () => setReloadKey((k) => k + 1),
+  });
 
   const incomeCategories = useMemo(
     () => categories.filter((c) => c.type === CategoryType.INCOME),
@@ -207,7 +194,6 @@ export default function IncomePage() {
   const buildIncomeTemplateRows = useCallback(
     (currentRows: DraftRow[]): DraftRow[] => {
       const used = new Set(currentRows.map((r) => normDesc(r.description)));
-      const date = `${selectedYear}-${String(selectedMonth).padStart(2, '0')}-01`;
       const newRows: DraftRow[] = [];
       for (const desc of INCOME_TEMPLATE_DESCRIPTIONS) {
         const key = normDesc(desc);
@@ -223,7 +209,6 @@ export default function IncomePage() {
           description: desc,
           categoryId: null,
           amount: '',
-          date,
           status: 'idle',
           errorMessage: null,
           lastSavedSnapshot: null,
@@ -240,7 +225,7 @@ export default function IncomePage() {
       }
       return newRows;
     },
-    [selectedMonth, selectedYear],
+    [],
   );
 
   // הזרקת שורות תבניות לטבלה בשימוש ראשון (once-only via ref)
@@ -256,82 +241,14 @@ export default function IncomePage() {
 
   const handleFillIncomeTemplates = useCallback(() => {
     const newRows = buildIncomeTemplateRows(rows);
-    if (newRows.length === 0) {
-      alert('כל שורות ההכנסה המוצעות כבר קיימות בטבלה.');
+    const flaggedRows = rows.filter((r) => r.needsReview);
+    const combined = [...flaggedRows, ...newRows];
+    if (combined.length === 0) {
+      alert('אין שורות חדשות מוצעות ואין שורות מסומנות לעדכון');
       return;
     }
-    setSuggestedRows(newRows);
-    setIsSuggestionModalOpen(true);
-  }, [rows, buildIncomeTemplateRows]);
-
-  const handleSaveSuggestedRows = useCallback(async (rowsFromModal: DraftRow[]) => {
-    const validRows = rowsFromModal.filter(
-      (row) => row.amount && Number(row.amount) > 0 && row.categoryId,
-    );
-
-    if (validRows.length === 0) {
-      setIsSuggestionModalOpen(false);
-      setSuggestedRows([]);
-      return;
-    }
-
-    if (!householdId) return;
-
-    setIsSavingTemplates(true);
-    const savedRowsToAppend: DraftRow[] = [];
-
-    try {
-      for (const row of validRows) {
-        const payload = {
-          amount: String(row.amount),
-          date: row.date || undefined,
-          description: row.description.trim(),
-          frequency: CategoryFrequency.MONTHLY,
-          householdId: householdId,
-          categoryId: row.categoryId ?? undefined,
-          installmentsTotal: row.installmentsTotal ?? undefined,
-          assignedMonth: row.assignedMonth ?? undefined,
-          isOneTime: row.isOneTime || undefined,
-        };
-
-        const result = await createBudgetItem(payload);
-
-        if (result && result.kind === 'budgetItems' && result.data?.[0]) {
-          const serverData = result.data[0];
-
-          const savedRow: DraftRow = {
-            ...row,
-            serverId: serverData.id,
-            status: 'synced',
-            lastSavedSnapshot: null,
-          };
-          savedRow.lastSavedSnapshot = snapshotOf(savedRow);
-
-          savedRowsToAppend.push(savedRow);
-        } else {
-          savedRowsToAppend.push({
-            ...row,
-            status: 'error',
-            errorMessage: 'השמירה בשרת נכשלה',
-          });
-        }
-      }
-
-      setRows((prev) => [...prev, ...savedRowsToAppend]);
-      setIsSuggestionModalOpen(false);
-      setSuggestedRows([]);
-    } catch (err) {
-      console.error('Failed to save template rows:', err);
-      alert('התרחשה שגיאה בעת שמירת הנתונים.');
-    } finally {
-      setIsSavingTemplates(false);
-    }
-  }, [householdId]);
-
-  const handleCloseSuggestionModal = useCallback(() => {
-    setIsSuggestionModalOpen(false);
-    setSuggestedRows([]);
-  }, []);
+    suggestions.open(combined);
+  }, [rows, buildIncomeTemplateRows, suggestions]);
 
   const handleRowsChange = useCallback((next: DraftRow[]) => {
     setRows(next);
@@ -344,35 +261,29 @@ export default function IncomePage() {
   const handleAdvancedModeRequest = useCallback((localId: string) => {
     setAdvancedModeForRowId(localId);
   }, []);
-
   const handleAdvancedModeConfirm = useCallback(
     (result: AdvancedModeResult) => {
       if (!advancedModeForRowId) return;
+
       setRows((prev) =>
         prev.map((r) => {
           if (r.localId !== advancedModeForRowId) return r;
+
           const status =
             r.status === 'idle' || r.status === 'synced' ? 'dirty' : r.status;
-          if (result.mode === 'installments') {
-            return {
-              ...r,
-              mode: 'installments',
-              installmentsTotal: result.installmentsTotal,
-              endDate: null,
-              isBiMonthly: false,
-              status,
-            };
-          }
+
           if (result.mode === 'recurring') {
             return {
               ...r,
               mode: 'recurring',
               installmentsTotal: null,
               endDate: result.endDate,
-              isBiMonthly: result.isBiMonthly,
+              isBiMonthly: false,
               status,
             };
           }
+          // installments / biMonthly cannot occur for income (showInstallments/showBiMonthly are false)
+          // treat them as none for type-safety completeness
           return {
             ...r,
             mode: 'none',
@@ -447,12 +358,6 @@ export default function IncomePage() {
     );
   }
 
-  const currentYear = new Date().getFullYear();
-  const years: number[] = [];
-  for (let y = currentYear + 1; y >= currentYear - 5; y -= 1) {
-    years.push(y);
-  }
-
   return (
     <motion.div
       variants={PAGE_VARIANTS}
@@ -503,57 +408,6 @@ export default function IncomePage() {
         </div>
       </motion.header>
 
-      <motion.section
-        variants={ITEM_VARIANTS}
-        className="flex items-center gap-3"
-      >
-        <div className="relative">
-          <select
-            value={selectedYear}
-            onChange={(e) => setSelectedYear(Number(e.target.value))}
-            aria-label="בחירת שנה"
-            className="appearance-none bg-surface border border-slate-200 px-8 py-2 rounded-xl label-text text-primary focus:outline-none focus:border-accent shadow-sm cursor-pointer"
-          >
-            {years.map((y) => (
-              <option key={y} value={y}>
-                {y}
-              </option>
-            ))}
-          </select>
-          <ChevronDown
-            size={14}
-            strokeWidth={ICON_STROKE}
-            className="absolute left-3 top-3.5 text-slate-400 pointer-events-none"
-          />
-        </div>
-
-        {activeTab === 'monthly' && (
-          <div className="relative">
-            <select
-              value={selectedMonth}
-              onChange={(e) => setSelectedMonth(Number(e.target.value))}
-              aria-label="בחירת חודש"
-              className="appearance-none bg-surface border border-slate-200 px-8 py-2 rounded-xl label-text text-primary focus:outline-none focus:border-accent shadow-sm cursor-pointer"
-            >
-              {HEBREW_MONTHS.map((label, idx) => (
-                <option key={label} value={idx + 1}>
-                  {label}
-                </option>
-              ))}
-            </select>
-            <ChevronDown
-              size={14}
-              strokeWidth={ICON_STROKE}
-              className="absolute left-3 top-3.5 text-slate-400 pointer-events-none"
-            />
-          </div>
-        )}
-
-        <div className="w-10 h-10 bg-surface border border-slate-200 rounded-xl flex items-center justify-center text-slate-400 shadow-sm">
-          <Calendar size={18} strokeWidth={ICON_STROKE} />
-        </div>
-      </motion.section>
-
       {error && (
         <motion.div
           variants={ITEM_VARIANTS}
@@ -581,6 +435,7 @@ export default function IncomePage() {
           isLoading={isLoading}
           onAddCategoryRequest={handleAddCategoryRequest}
           onAdvancedModeRequest={handleAdvancedModeRequest}
+          advancedModeRowId={advancedModeForRowId}
           onAfterAdvancedModeSave={handleAfterAdvancedModeSave}
           showTemplatesButton={!isFirstUse && activeTab === 'monthly'}
           onFillTemplates={handleFillIncomeTemplates}
@@ -590,11 +445,11 @@ export default function IncomePage() {
       </motion.div>
 
       <SuggestedRowsModal
-        isOpen={isSuggestionModalOpen}
-        rows={suggestedRows}
-        isLoading={isSavingTemplates}
-        onClose={handleCloseSuggestionModal}
-        onConfirm={handleSaveSuggestedRows}
+        isOpen={suggestions.isOpen}
+        rows={suggestions.rows}
+        isLoading={suggestions.isSaving}
+        onClose={suggestions.close}
+        onConfirm={suggestions.save}
         title="הכנסות מוצעות להוספה"
         subtitle="בחרו קטגוריה והזינו סכום עבור ההכנסות הרלוונטיות. שורות ללא סכום או קטגוריה לא יתווספו."
         descriptionHeader="תיאור ההכנסה"
@@ -609,7 +464,7 @@ export default function IncomePage() {
         initialMode={advancedModeRow?.mode ?? 'none'}
         initialInstallmentsTotal={advancedModeRow?.installmentsTotal ?? null}
         initialEndDate={advancedModeRow?.endDate ?? null}
-        initialIsBiMonthly={advancedModeRow?.isBiMonthly ?? false}
+        initialBaseMonth={null}
         totalAmount={advancedModeRow?.amount ?? ''}
         onClose={() => setAdvancedModeForRowId(null)}
         onConfirm={handleAdvancedModeConfirm}

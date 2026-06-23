@@ -1,8 +1,10 @@
 import { Repository, IsNull, In } from 'typeorm';
 import {
+  BUDGET_BREAKOUT_EXPENSE_PARENTS,
   CategoryFrequency,
   CategoryType,
   CurrencyCode,
+  Holiday,
   MonthlySummary,
 } from '@gutplus/shared';
 import { AppDataSource } from '../config/data-source';
@@ -42,7 +44,7 @@ function centsToNumber(cents: bigint): number {
  * Returns true when `item` should be included in the monthly summary for the
  * given (month, year). Does NOT check category type — caller decides the bucket.
  *
- * @param item - A BudgetItem row with its `date` already as a Date.
+ * @param item - A BudgetItem row.
  * @param month - Gregorian month 1-12.
  * @param year  - Gregorian year (e.g. 2026).
  */
@@ -60,20 +62,22 @@ export function isItemIncludedInMonth(
     }
   }
 
-  // Installment row — included only when its own date matches month+year
+  // Installment row — anchored to a month of the year via assignedMonth
   if (item.installmentGroupId !== null) {
-    const d = item.date instanceof Date ? item.date : new Date(item.date);
-    return d.getMonth() + 1 === month && d.getFullYear() === year;
+    return item.assignedMonth === month;
   }
 
-  // isOneTime — included only for its exact month+year
+  // isOneTime — anchored to a single month of the year via assignedMonth
   if (item.isOneTime) {
-    const d = item.date instanceof Date ? item.date : new Date(item.date);
-    return d.getMonth() + 1 === month && d.getFullYear() === year;
+    return item.assignedMonth === month;
   }
 
-  // Holiday item — month determined by Hebrew calendar
+  // Holiday item — month determined by Hebrew calendar, except Hasidic events
+  // which have no fixed Hebrew date and are anchored by assignedMonth instead.
   if (item.holiday !== null) {
+    if (item.holiday === Holiday.HASIDIS_EVENT) {
+      return item.assignedMonth === month;
+    }
     const holidayMonth = getErevHolidayGregorianMonth(item.holiday, year);
     return holidayMonth === month;
   }
@@ -138,26 +142,46 @@ function getContributingAmount(item: BudgetItem, amountResolver: (item: BudgetIt
 
 const DEBT_PARENT_NAME = 'החזרי חובות';
 
+/** Collects a category subtree (the named expense parent + all descendants). */
+function collectSubtreeIds(
+  categories: Category[],
+  parentName: string,
+): Set<string> {
+  const parent = categories.find(
+    c => c.name === parentName && c.type === CategoryType.EXPENSE,
+  );
+  if (!parent) {
+    return new Set();
+  }
+  const ids = new Set<string>([parent.id]);
+  const queue: string[] = [parent.id];
+  while (queue.length > 0) {
+    const parentId = queue.shift()!;
+    for (const cat of categories) {
+      if (cat.parentCategory?.id === parentId && !ids.has(cat.id)) {
+        ids.add(cat.id);
+        queue.push(cat.id);
+      }
+    }
+  }
+  return ids;
+}
+
+export interface CategoryBreakdowns {
+  /** "החזרי חובות" subtree — excluded from balanceBeforeDebts. */
+  debtIds: Set<string>;
+  /** Named breakout subtrees (e.g. מעשרות) — normal expenses, shown separately. */
+  breakouts: Map<string, Set<string>>;
+}
+
 /**
- * Returns the set of category IDs that belong to the "החזרי חובות" subtree
- * (the parent AND all its descendants).
+ * Resolves the debt subtree and every configured breakout subtree from a single
+ * category load. Shared by SummaryService and ForecastService.
  */
-async function resolveDebtCategoryIds(
+export async function resolveCategoryBreakdowns(
   categoryRepo: Repository<Category>,
   householdId: string,
-): Promise<Set<string>> {
-  // Load all categories visible to this household (household-specific + global)
-  const all = await categoryRepo
-    .createQueryBuilder('cat')
-    .leftJoin('cat.household', 'household')
-    .where('household.id = :householdId OR household.id IS NULL', { householdId })
-    .select(['cat.id', 'cat.name', 'cat.type'])
-    .addSelect('parent.id', 'parent_id')
-    .leftJoin('cat.parentCategory', 'parent')
-    .addSelect(['parent.id'])
-    .getMany();
-
-  // Also load parentCategory relation so we can traverse the tree
+): Promise<CategoryBreakdowns> {
   const categories = await categoryRepo.find({
     where: [
       { household: { id: householdId } },
@@ -171,27 +195,12 @@ async function resolveDebtCategoryIds(
     },
   });
 
-  // Find the debt parent
-  const debtParent = categories.find(
-    c => c.name === DEBT_PARENT_NAME && c.type === CategoryType.EXPENSE,
-  );
-  if (!debtParent) {
-    return new Set();
+  const debtIds = collectSubtreeIds(categories, DEBT_PARENT_NAME);
+  const breakouts = new Map<string, Set<string>>();
+  for (const name of BUDGET_BREAKOUT_EXPENSE_PARENTS) {
+    breakouts.set(name, collectSubtreeIds(categories, name));
   }
-
-  // BFS to collect all descendant IDs
-  const debtIds = new Set<string>([debtParent.id]);
-  const queue: string[] = [debtParent.id];
-  while (queue.length > 0) {
-    const parentId = queue.shift()!;
-    for (const cat of categories) {
-      if (cat.parentCategory?.id === parentId && !debtIds.has(cat.id)) {
-        debtIds.add(cat.id);
-        queue.push(cat.id);
-      }
-    }
-  }
-  return debtIds;
+  return { debtIds, breakouts };
 }
 
 // ---------------------------------------------------------------------------
@@ -219,6 +228,7 @@ export interface AggregateMonthResult {
 export function aggregateMonth(
   items: BudgetItem[],
   debtCategoryIds: Set<string>,
+  breakoutCategoryIds: Map<string, Set<string>>,
   rateMap: Map<CurrencyCode, string>,
   month: number,
   year: number,
@@ -245,11 +255,28 @@ export function aggregateMonth(
   let incomesMonthly = 0n;
   let incomesYearly = 0n;
   let expensesMonthly = 0n;
-  let expensesYearly = 0n;
+  let expensesYearlySpread = 0n;
+  let expensesYearlyThisMonth = 0n;
   let expensesHolidays = 0n;
   let expensesInstallments = 0n;
   let debtRepayments = 0n;
   let hadTargetAmount = false;
+
+  // Per-breakout accumulators (initialized so every configured breakout is
+  // present in the output, even when it has no items this month).
+  const breakoutCents = new Map<string, bigint>();
+  for (const name of breakoutCategoryIds.keys()) {
+    breakoutCents.set(name, 0n);
+  }
+
+  // Returns the breakout name whose subtree contains this category, or null.
+  const matchBreakout = (categoryId?: string | null): string | null => {
+    if (!categoryId) return null;
+    for (const [name, ids] of breakoutCategoryIds) {
+      if (ids.has(categoryId)) return name;
+    }
+    return null;
+  };
 
   for (const item of items) {
     if (!isItemIncludedInMonth(item, month, year)) {
@@ -267,7 +294,7 @@ export function aggregateMonth(
     const categoryType = item.category?.type;
     const categoryId = item.category?.id;
 
-    // Check if this is a debt repayment item
+    // Check if this is a debt repayment item (excluded from balanceBeforeDebts)
     const isDebt = categoryId !== undefined && categoryId !== null && debtCategoryIds.has(categoryId);
 
     if (isDebt) {
@@ -288,17 +315,30 @@ export function aggregateMonth(
       } else {
         incomesYearly += ilsCents;
       }
+      continue;
+    }
+
+    // EXPENSE — pull out named breakout categories first (still real expenses,
+    // counted toward balanceBeforeDebts, but shown on their own rows).
+    const breakoutName = matchBreakout(categoryId);
+    if (breakoutName !== null) {
+      breakoutCents.set(breakoutName, (breakoutCents.get(breakoutName) ?? 0n) + ilsCents);
+      continue;
+    }
+
+    // General expense bucketing (holiday and installment take priority)
+    if (item.holiday !== null) {
+      expensesHolidays += ilsCents;
+    } else if (item.installmentGroupId !== null) {
+      expensesInstallments += ilsCents;
+    } else if (item.frequency === CategoryFrequency.MONTHLY) {
+      expensesMonthly += ilsCents;
+    } else if (item.assignedMonth === null && !item.isOneTime) {
+      // Yearly spread (÷12 already applied by getContributingAmount)
+      expensesYearlySpread += ilsCents;
     } else {
-      // EXPENSE bucketing (holiday and installment take priority)
-      if (item.holiday !== null) {
-        expensesHolidays += ilsCents;
-      } else if (item.installmentGroupId !== null) {
-        expensesInstallments += ilsCents;
-      } else if (item.frequency === CategoryFrequency.MONTHLY) {
-        expensesMonthly += ilsCents;
-      } else {
-        expensesYearly += ilsCents;
-      }
+      // Yearly anchored to this specific month (assigned / one-time)
+      expensesYearlyThisMonth += ilsCents;
     }
   }
 
@@ -311,16 +351,27 @@ export function aggregateMonth(
   const incomesMonthlyNum = round2(incomesMonthly);
   const incomesYearlyNum = round2(incomesYearly);
   const expensesMonthlyNum = round2(expensesMonthly);
-  const expensesYearlyNum = round2(expensesYearly);
+  const expensesYearlySpreadNum = round2(expensesYearlySpread);
+  const expensesYearlyThisMonthNum = round2(expensesYearlyThisMonth);
+  const expensesYearlyNum =
+    Math.round((expensesYearlySpreadNum + expensesYearlyThisMonthNum) * 100) / 100;
   const expensesHolidaysNum = round2(expensesHolidays);
   const expensesInstallmentsNum = round2(expensesInstallments);
   const debtRepaymentsNum = round2(debtRepayments);
+
+  const breakouts = [...breakoutCents.entries()].map(([name, cents]) => ({
+    name,
+    amount: round2(cents),
+  }));
+  const breakoutsTotalNum =
+    Math.round(breakouts.reduce((sum, b) => sum + b.amount, 0) * 100) / 100;
 
   const balanceBeforeDebts =
     Math.round(
       (incomesMonthlyNum + incomesYearlyNum -
         expensesMonthlyNum - expensesYearlyNum -
-        expensesHolidaysNum - expensesInstallmentsNum) * 100,
+        expensesHolidaysNum - expensesInstallmentsNum -
+        breakoutsTotalNum) * 100,
     ) / 100;
 
   const balanceAfterDebts =
@@ -334,8 +385,11 @@ export function aggregateMonth(
     expenses: {
       monthly: expensesMonthlyNum,
       yearly: expensesYearlyNum,
+      yearlySpread: expensesYearlySpreadNum,
+      yearlyThisMonth: expensesYearlyThisMonthNum,
       holidays: expensesHolidaysNum,
       installments: expensesInstallmentsNum,
+      breakouts,
     },
     debtRepayments: debtRepaymentsNum,
     balanceBeforeDebts,
@@ -382,8 +436,11 @@ export class SummaryService {
       .where('household.id = :householdId', { householdId })
       .getMany();
 
-    // 2. Resolve debt category subtree
-    const debtCategoryIds = await resolveDebtCategoryIds(this.categoryRepo, householdId);
+    // 2. Resolve debt + breakout category subtrees
+    const { debtIds, breakouts } = await resolveCategoryBreakdowns(
+      this.categoryRepo,
+      householdId,
+    );
 
     // 3. Pre-fetch exchange rates for all distinct currencies (one call per currency)
     const distinctCurrencies = [...new Set(items.map(item => item.currency))];
@@ -398,7 +455,8 @@ export class SummaryService {
     // 4. Delegate to shared aggregation engine with the summary amount resolver
     const { summary } = aggregateMonth(
       items,
-      debtCategoryIds,
+      debtIds,
+      breakouts,
       rateMap,
       month,
       year,

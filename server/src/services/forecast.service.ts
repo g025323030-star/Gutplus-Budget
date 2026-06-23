@@ -1,52 +1,10 @@
-import { Repository, IsNull } from 'typeorm';
+import { Repository } from 'typeorm';
 import { CurrencyCode, MonthlyForecast } from '@gutplus/shared';
 import { AppDataSource } from '../config/data-source';
 import { BudgetItem } from '../entities/budget-item.entity';
 import { Category } from '../entities/category.entity';
-import { aggregateMonth } from './summary.service';
+import { aggregateMonth, resolveCategoryBreakdowns } from './summary.service';
 import { exchangeRateService } from './exchange-rate.service';
-
-// ---------------------------------------------------------------------------
-// Debt category resolution (mirrored from summary.service — same logic)
-// ---------------------------------------------------------------------------
-
-const DEBT_PARENT_NAME = 'החזרי חובות';
-
-async function resolveDebtCategoryIds(
-  categoryRepo: Repository<Category>,
-  householdId: string,
-): Promise<Set<string>> {
-  const categories = await categoryRepo.find({
-    where: [
-      { household: { id: householdId } },
-      { household: { id: IsNull() } as any },
-    ],
-    relations: ['parentCategory'],
-    select: {
-      id: true,
-      name: true,
-      type: true,
-    },
-  });
-
-  const debtParent = categories.find(c => c.name === DEBT_PARENT_NAME);
-  if (!debtParent) {
-    return new Set();
-  }
-
-  const debtIds = new Set<string>([debtParent.id]);
-  const queue: string[] = [debtParent.id];
-  while (queue.length > 0) {
-    const parentId = queue.shift()!;
-    for (const cat of categories) {
-      if (cat.parentCategory?.id === parentId && !debtIds.has(cat.id)) {
-        debtIds.add(cat.id);
-        queue.push(cat.id);
-      }
-    }
-  }
-  return debtIds;
-}
 
 // ---------------------------------------------------------------------------
 // ForecastService
@@ -84,8 +42,11 @@ export class ForecastService {
       .where('household.id = :householdId', { householdId })
       .getMany();
 
-    // 3. Resolve debt category subtree (once)
-    const debtCategoryIds = await resolveDebtCategoryIds(this.categoryRepo, householdId);
+    // 3. Resolve debt + breakout category subtrees (once)
+    const { debtIds, breakouts } = await resolveCategoryBreakdowns(
+      this.categoryRepo,
+      householdId,
+    );
 
     // 4. Pre-fetch exchange rates for all distinct currencies (one call per currency)
     const distinctCurrencies = [...new Set(items.map(item => item.currency))];
@@ -116,7 +77,8 @@ export class ForecastService {
 
       const { summary, hadTargetAmount } = aggregateMonth(
         items,
-        debtCategoryIds,
+        debtIds,
+        breakouts,
         rateMap,
         month,
         year,

@@ -1,15 +1,14 @@
 import { useEffect, useMemo, useState } from 'react';
 import { AlertCircle, LayoutDashboard } from 'lucide-react';
-import { CategoryFrequency, CategoryType } from '@gutplus/shared';
-import type { BudgetItem, Category } from '@gutplus/shared';
+import type { BudgetItem, Category, MonthlySummary } from '@gutplus/shared';
 import { ICON_STROKE } from '../constants/ui';
 import { getBudgetItems } from '../services/budget-items.service';
 import { getCategories } from '../services/categories.service';
+import { getSummary, getRollingYearSummary } from '../services/summary.service';
 import PeriodToggle from '../components/snapshot/PeriodToggle';
 import type { PeriodMode } from '../components/snapshot/PeriodToggle';
 import SummaryCards from '../components/snapshot/SummaryCards';
 import CategoryPieChart from '../components/snapshot/CategoryPieChart';
-import SnapshotCalendar from '../components/snapshot/SnapshotCalendar';
 import TransactionsList from '../components/snapshot/TransactionsList';
 
 function LoadingSkeleton() {
@@ -49,6 +48,10 @@ function ErrorBlock({ message }: ErrorBlockProps) {
   );
 }
 
+// Each budget item is a recurring/averaged forecast entry rather than a dated
+// transaction. Per the product model, every item is shown except:
+//   • installment payments — anchored to a single month via assignedMonth;
+//   • endDate-bounded items — dropped once their expiration month has passed.
 const filterToPeriod = (
   transactions: BudgetItem[],
   mode: PeriodMode,
@@ -56,20 +59,28 @@ const filterToPeriod = (
   year: number,
 ): BudgetItem[] =>
   transactions.filter((tx) => {
-    const txDate = new Date(tx.date);
-    if (txDate.getFullYear() !== year) return false;
-    if (mode === 'monthly' && txDate.getMonth() + 1 !== month) return false;
+    if (tx.endDate) {
+      const end = new Date(tx.endDate);
+      const periodStart =
+        mode === 'monthly' ? new Date(year, month - 1, 1) : new Date(year, 0, 1);
+      if (end < periodStart) return false;
+    }
+    if (tx.installmentGroupId != null) {
+      return mode === 'yearly' || tx.assignedMonth === month;
+    }
     return true;
   });
 
 export default function SnapshotPage() {
   const now = new Date();
   const [mode, setMode] = useState<PeriodMode>('monthly');
-  const [selectedMonth, setSelectedMonth] = useState<number>(now.getMonth() + 1);
-  const [selectedYear, setSelectedYear] = useState<number>(now.getFullYear());
+  // No month/year picker — the page reflects the current period.
+  const selectedMonth = now.getMonth() + 1;
+  const selectedYear = now.getFullYear();
 
   const [transactions, setTransactions] = useState<BudgetItem[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
+  const [summary, setSummary] = useState<MonthlySummary | null>(null);
 
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
@@ -84,9 +95,15 @@ export default function SnapshotPage() {
       const queryMonth = mode === 'monthly' ? selectedMonth : undefined;
       const queryYear = selectedYear;
 
-      const [txResult, catsResult] = await Promise.allSettled([
+      const summaryPromise =
+        mode === 'monthly'
+          ? getSummary(selectedMonth, selectedYear)
+          : getRollingYearSummary(selectedMonth, selectedYear);
+
+      const [txResult, catsResult, summaryResult] = await Promise.allSettled([
         getBudgetItems(queryMonth, queryYear),
         getCategories(),
+        summaryPromise,
       ]);
       if (cancelled) return;
 
@@ -105,6 +122,14 @@ export default function SnapshotPage() {
       } else {
         console.error('Error loading transactions:', txResult.reason);
         setTransactions([]);
+        setError('שגיאה בטעינת הנתונים. נסה לרענן את הדף.');
+      }
+
+      if (summaryResult.status === 'fulfilled') {
+        setSummary(summaryResult.value);
+      } else {
+        console.error('Error loading summary:', summaryResult.reason);
+        setSummary(null);
         setError('שגיאה בטעינת הנתונים. נסה לרענן את הדף.');
       }
 
@@ -129,27 +154,6 @@ export default function SnapshotPage() {
     [transactions, mode, selectedMonth, selectedYear],
   );
 
-  const { incomeTotal, expenseTotal } = useMemo(() => {
-    let income = 0;
-    let expense = 0;
-    const targetFrequency =
-      mode === 'monthly'
-        ? CategoryFrequency.MONTHLY
-        : CategoryFrequency.YEARLY;
-    periodTransactions.forEach((tx) => {
-      if (tx.frequency !== targetFrequency) return;
-      if (!tx.categoryId) return;
-      const category = categoryById.get(tx.categoryId);
-      if (!category) return;
-      const amount = parseFloat(tx.amount) || 0;
-      if (category.type === CategoryType.INCOME) income += amount;
-      else if (category.type === CategoryType.EXPENSE) expense += amount;
-    });
-    return { incomeTotal: income, expenseTotal: expense };
-  }, [periodTransactions, categoryById, mode]);
-
-  const balance = incomeTotal - expenseTotal;
-
   return (
     <div className="p-6 md:p-8 space-y-6">
       <header className="flex items-center gap-3 mb-2">
@@ -164,14 +168,7 @@ export default function SnapshotPage() {
         סקירה כוללת של ההכנסות וההוצאות שלך — חודשית או שנתית.
       </p>
 
-      <PeriodToggle
-        mode={mode}
-        onModeChange={setMode}
-        selectedMonth={selectedMonth}
-        selectedYear={selectedYear}
-        onMonthChange={setSelectedMonth}
-        onYearChange={setSelectedYear}
-      />
+      <PeriodToggle mode={mode} onModeChange={setMode} />
 
       {error && <ErrorBlock message={error} />}
 
@@ -180,26 +177,13 @@ export default function SnapshotPage() {
       ) : (
         !error && (
           <>
-            <SummaryCards
-              income={incomeTotal}
-              expense={expenseTotal}
-              balance={balance}
-            />
+            {summary && <SummaryCards summary={summary} />}
 
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              <CategoryPieChart
-                transactions={periodTransactions}
-                categoryById={categoryById}
-                mode={mode}
-              />
-              <SnapshotCalendar
-                mode={mode}
-                year={selectedYear}
-                month={selectedMonth}
-                transactions={periodTransactions}
-                categoryById={categoryById}
-              />
-            </div>
+            <CategoryPieChart
+              transactions={periodTransactions}
+              categoryById={categoryById}
+              mode={mode}
+            />
 
             <TransactionsList
               mode={mode}

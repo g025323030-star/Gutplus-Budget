@@ -3,7 +3,6 @@ import { CategoryFrequency, CurrencyCode, Holiday } from '../enums';
 export interface BudgetItem {
   id: string;
   amount: string;
-  date: string;
   description: string;
   needsReview: boolean;
   frequency: CategoryFrequency;

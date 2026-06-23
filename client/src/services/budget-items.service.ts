@@ -14,7 +14,6 @@ const apiUrl = (path: string): string =>
 interface RawBudgetItem {
   id: string;
   amount: string;
-  date: string;
   description: string;
   needsReview: boolean;
   frequency: CategoryFrequency;
@@ -41,7 +40,6 @@ interface RawBudgetItem {
 const normalizeBudgetItem = (raw: RawBudgetItem): BudgetItem => ({
   id: raw.id,
   amount: raw.amount,
-  date: raw.date,
   description: raw.description,
   needsReview: raw.needsReview,
   frequency: raw.frequency ?? CategoryFrequency.MONTHLY,

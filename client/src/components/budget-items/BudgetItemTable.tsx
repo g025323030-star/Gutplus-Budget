@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import axios from 'axios';
 import { AnimatePresence, motion } from 'framer-motion';
 import { AlertTriangle, ListPlus, Plus } from 'lucide-react';
@@ -13,17 +13,6 @@ import {
 import BudgetItemRow, { validateRow } from './BudgetItemRow';
 import type { DraftRow } from './types';
 import { snapshotOf, snapshotsEqual } from './types';
-
-const padTwo = (n: number): string => String(n).padStart(2, '0');
-
-const defaultDateFor = (year: number, month?: number): string => {
-  if (month) return `${year}-${padTwo(month)}-01`;
-  const today = new Date();
-  if (today.getFullYear() === year) {
-    return `${year}-${padTwo(today.getMonth() + 1)}-${padTwo(today.getDate())}`;
-  }
-  return `${year}-01-01`;
-};
 
 const extractErrorMessage = (err: unknown): string => {
   if (axios.isAxiosError(err)) {
@@ -49,13 +38,20 @@ interface BudgetItemTableProps {
   onRowFocus?: (localId: string) => void;
   onAddCategoryRequest?: (localId: string) => void;
   onAdvancedModeRequest?: (localId: string) => void;
+  /** localId of the row whose advanced-mode modal is currently open (if any). */
+  advancedModeRowId?: string | null;
   onAfterAdvancedModeSave?: () => void;
   onFillTemplates?: () => void;
   showTemplatesButton?: boolean;
   title?: string;
   descriptionPlaceholder?: string;
   isYearly?: boolean;
-  isBiMonthlySection?: boolean;
+  categoryMode?: 'combobox' | 'label';
+  defaultCategoryId?: string | null;
+  addRowDisabled?: boolean;
+  sortable?: boolean;
+  hideAddRow?: boolean;
+  compact?: boolean;
 }
 
 export default function BudgetItemTable({
@@ -71,19 +67,31 @@ export default function BudgetItemTable({
   onRowFocus,
   onAddCategoryRequest,
   onAdvancedModeRequest,
+  advancedModeRowId = null,
   onAfterAdvancedModeSave,
   onFillTemplates,
   showTemplatesButton = false,
   title = 'רשימת הוצאות',
   descriptionPlaceholder = 'לדוגמה: סופר',
   isYearly = false,
-  isBiMonthlySection = false,
+  categoryMode = 'combobox',
+  defaultCategoryId = null,
+  addRowDisabled = false,
+  sortable = false,
+  hideAddRow = false,
+  compact = false,
 }: BudgetItemTableProps) {
+  type SortOption = 'default' | 'description-asc' | 'description-desc' | 'amount-desc' | 'amount-asc' | 'category';
+  const [sortOption, setSortOption] = useState<SortOption>('default');
+
   const rowsRef = useRef<DraftRow[]>(rows);
   const pendingResave = useRef<Record<string, boolean>>({});
   const newRowFocus = useRef<string | null>(null);
   const fadeTimers = useRef<Record<string, number>>({});
+  const prevAdvancedRowId = useRef<string | null>(advancedModeRowId);
 
+  // Keep rowsRef in sync FIRST so the advanced-mode persist effect below reads
+  // the freshly-applied mode (installments/bi-monthly) rather than a stale row.
   useEffect(() => {
     rowsRef.current = rows;
   }, [rows]);
@@ -149,7 +157,6 @@ export default function BudgetItemTable({
           yearConstraint,
           monthConstraint,
           isYearly,
-          isBiMonthlySection,
         )
       ) {
         return;
@@ -172,10 +179,12 @@ export default function BudgetItemTable({
           current.installmentsTotal !== null &&
           current.installmentsTotal >= 2;
         const isUnsavedRecurring = !savedId && current.mode === 'recurring';
+        // A newly-created bi-monthly row (baseMonth set) must re-home into the
+        // correct table by parity, so reload after it is created.
+        const isUnsavedBiMonthly = !savedId && current.baseMonth !== null;
 
         const base = {
           amount: current.amount,
-          date: current.date || undefined,
           description: current.description.trim(),
           frequency,
           householdId,
@@ -186,10 +195,16 @@ export default function BudgetItemTable({
           assignedMonth: current.assignedMonth ?? undefined,
           isOneTime: current.isOneTime || undefined,
           baseMonth: current.baseMonth ?? undefined,
+          // "Last billing month": a single projected item stops being billed
+          // after this date. Materialized recurring (income) sets endDate via
+          // the isUnsavedRecurring branch below instead.
+          ...(current.mode === 'lastMonth' && current.endDate
+            ? { endDate: current.endDate }
+            : {}),
         };
 
         const payload = isUnsavedInstallments
-          ? { ...base, installmentsTotal: current.installmentsTotal! }
+          ? { ...base, installmentsTotal: current.installmentsTotal!, installmentIndex: 1 }
           : isUnsavedRecurring
             ? {
                 ...base,
@@ -218,9 +233,9 @@ export default function BudgetItemTable({
         });
         scheduleSyncedFade(localId);
 
-        if (isUnsavedInstallments || isUnsavedRecurring) {
-          // Installments expand into multiple rows — reload so the generated
-          // occurrences show up correctly.
+        if (isUnsavedInstallments || isUnsavedRecurring || isUnsavedBiMonthly) {
+          // Installments expand into multiple rows, and bi-monthly rows must
+          // re-home by parity — reload so everything shows up correctly.
           onAfterAdvancedModeSave?.();
         }
 
@@ -245,6 +260,19 @@ export default function BudgetItemTable({
       onAfterAdvancedModeSave,
     ],
   );
+
+  // When the advanced-mode modal closes (advancedModeRowId goes from a row's id
+  // back to null), persist that row. The row's own blur was suppressed while the
+  // modal was open, so this is what actually saves the chosen mode — including
+  // creating the installment plan. Runs after the rowsRef sync effect, so the
+  // row already carries its final mode.
+  useEffect(() => {
+    const closedRowId = prevAdvancedRowId.current;
+    prevAdvancedRowId.current = advancedModeRowId;
+    if (closedRowId && advancedModeRowId === null) {
+      persistRow(closedRowId);
+    }
+  }, [advancedModeRowId, persistRow]);
 
   const handleRowPatch = useCallback(
     (localId: string, patch: Partial<DraftRow>) => {
@@ -274,7 +302,12 @@ export default function BudgetItemTable({
         return;
       }
       try {
-        await deleteBudgetItem(current.serverId);
+        // For a collapsed installment group, delete ALL sibling rows on the server
+        const idsToDelete =
+          current.installmentSchedule && current.installmentSchedule.length > 0
+            ? current.installmentSchedule.map((e) => e.serverId).filter(Boolean)
+            : [current.serverId];
+        await Promise.all(idsToDelete.map((id) => deleteBudgetItem(id)));
         removeRow(localId);
       } catch (err) {
         patchRow(localId, {
@@ -299,9 +332,8 @@ export default function BudgetItemTable({
       recurringFrequency: null,
       recurringEndDate: null,
       description: '',
-      categoryId: null,
+      categoryId: defaultCategoryId ?? null,
       amount: '',
-      date: defaultDateFor(yearConstraint, monthConstraint),
       status: 'idle',
       errorMessage: null,
       lastSavedSnapshot: null,
@@ -320,50 +352,93 @@ export default function BudgetItemTable({
     rowsRef.current = next;
     onChange(next);
     onRowFocus?.(localId);
-  }, [monthConstraint, yearConstraint, onChange, onRowFocus]);
+  }, [monthConstraint, yearConstraint, defaultCategoryId, onChange, onRowFocus]);
 
   const errorCount = useMemo(
     () => rows.filter((r) => r.status === 'error').length,
     [rows],
   );
 
+  const displayRows = useMemo(() => {
+    if (sortOption === 'default') return rows;
+    const copy = [...rows];
+    if (sortOption === 'description-asc') {
+      copy.sort((a, b) => a.description.localeCompare(b.description, 'he'));
+    } else if (sortOption === 'description-desc') {
+      copy.sort((a, b) => b.description.localeCompare(a.description, 'he'));
+    } else if (sortOption === 'amount-desc') {
+      copy.sort((a, b) => parseFloat(b.amount || '0') - parseFloat(a.amount || '0'));
+    } else if (sortOption === 'amount-asc') {
+      copy.sort((a, b) => parseFloat(a.amount || '0') - parseFloat(b.amount || '0'));
+    } else if (sortOption === 'category') {
+      copy.sort((a, b) => {
+        const nameA = categories.find((c) => c.id === a.categoryId)?.name ?? '';
+        const nameB = categories.find((c) => c.id === b.categoryId)?.name ?? '';
+        return nameA.localeCompare(nameB, 'he');
+      });
+    }
+    return copy;
+  }, [rows, sortOption, categories]);
+
   const isEmpty = !isLoading && rows.length === 0;
   const noCategories = categories.length === 0;
 
   return (
-    <div className="bg-surface rounded-2xl shadow-sm border border-slate-100 p-6 flex flex-col h-full">
+    <div className={`bg-surface rounded-2xl shadow-sm border border-slate-100 flex flex-col h-full ${compact ? 'p-4' : 'p-6'}`}>
       <div className="flex items-center justify-between gap-3 mb-6">
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-3">
           {/* <span className="text-xl" aria-hidden>
             💰
           </span> */}
           <h2 className="heading-3">{title}</h2>
+          {sortable && (
+            <select
+              value={sortOption}
+              onChange={(e) => setSortOption(e.target.value as SortOption)}
+              aria-label="מיון שורות"
+              className="text-xs bg-background/60 border border-slate-200 rounded-lg px-2 py-1.5 text-slate-500 focus:outline-none focus:border-accent transition-all duration-200 cursor-pointer"
+            >
+              <option value="default">מיון: ברירת מחדל</option>
+              <option value="description-asc">תיאור א→ת</option>
+              <option value="description-desc">תיאור ת→א</option>
+              <option value="amount-desc">סכום מהגבוה לנמוך</option>
+              <option value="amount-asc">סכום מהנמוך לגבוה</option>
+              <option value="category">לפי קטגוריה</option>
+            </select>
+          )}
         </div>
-        <div className="flex items-center gap-2">
-          {showTemplatesButton && onFillTemplates && (
+        {!hideAddRow && (
+          <div className="flex items-center gap-2">
+            {showTemplatesButton && onFillTemplates && (
+              <motion.button
+                type="button"
+                onClick={onFillTemplates}
+                whileHover={{ scale: 1.05 }}
+                whileTap={{ scale: 0.95 }}
+                aria-label="הוסף שורות מתבנית"
+                title="הוסף שורות מתבנית"
+                className="w-10 h-10 bg-surface border border-slate-200 text-primary rounded-xl shadow-sm hover:shadow-md hover:bg-slate-50 transition-all duration-200 flex items-center justify-center"
+              >
+                <ListPlus size={18} strokeWidth={ICON_STROKE} />
+              </motion.button>
+            )}
             <motion.button
               type="button"
-              onClick={onFillTemplates}
-              whileHover={{ scale: 1.05 }}
-              whileTap={{ scale: 0.95 }}
-              aria-label="הוסף שורות מתבנית"
-              title="הוסף שורות מתבנית"
-              className="w-10 h-10 bg-surface border border-slate-200 text-primary rounded-xl shadow-sm hover:shadow-md hover:bg-slate-50 transition-all duration-200 flex items-center justify-center"
+              onClick={addRowDisabled ? undefined : handleAddRow}
+              disabled={addRowDisabled}
+              whileHover={addRowDisabled ? undefined : { scale: 1.02 }}
+              whileTap={addRowDisabled ? undefined : { scale: 0.98 }}
+              className={`px-4 py-2 rounded-xl label-text shadow-sm transition-all duration-200 flex items-center gap-1.5 ${
+                addRowDisabled
+                  ? 'bg-accent/40 text-white/70 opacity-50 cursor-not-allowed'
+                  : 'bg-accent text-white hover:shadow-md hover:bg-accent/90'
+              }`}
             >
-              <ListPlus size={18} strokeWidth={ICON_STROKE} />
+              <Plus size={16} strokeWidth={ICON_STROKE} />
+              הוסף שורה
             </motion.button>
-          )}
-          <motion.button
-            type="button"
-            onClick={handleAddRow}
-            whileHover={{ scale: 1.02 }}
-            whileTap={{ scale: 0.98 }}
-            className="bg-accent text-white px-4 py-2 rounded-xl label-text shadow-sm hover:shadow-md hover:bg-accent/90 transition-all duration-200 flex items-center gap-1.5"
-          >
-            <Plus size={16} strokeWidth={ICON_STROKE} />
-            הוסף שורה
-          </motion.button>
-        </div>
+          </div>
+        )}
       </div>
 
       <AnimatePresence>
@@ -388,17 +463,8 @@ export default function BudgetItemTable({
         )}
       </AnimatePresence>
 
-      <div className="hidden md:grid md:grid-cols-[2fr_1.5fr_1fr_1fr_auto] md:gap-4 px-4 mb-2">
-        <span className="label-text text-slate-400 text-xs">תיאור</span>
-        <span className="label-text text-slate-400 text-xs">קטגוריה</span>
-        <span className="label-text text-slate-400 text-xs">סכום (₪)</span>
-        <span className="label-text text-slate-400 text-xs">תאריך</span>
-        <span className="label-text text-slate-400 text-xs text-center">
-          פעולה
-        </span>
-      </div>
 
-      <div className="space-y-3 overflow-y-auto max-h-[600px] pr-1 flex-1">
+      <div className={`space-y-3 overflow-y-auto pr-1 flex-1 ${compact ? 'max-h-[280px]' : 'max-h-[600px]'}`}>
         {noCategories && !isLoading && (
           <div className="py-10 text-center">
             <p className="body-text text-slate-500">
@@ -428,7 +494,7 @@ export default function BudgetItemTable({
         )}
 
         <AnimatePresence initial={false}>
-          {rows.map((row) => (
+          {displayRows.map((row) => (
             <BudgetItemRow
               key={row.localId}
               row={row}
@@ -437,9 +503,9 @@ export default function BudgetItemTable({
               monthConstraint={monthConstraint}
               yearConstraint={yearConstraint}
               isYearly={isYearly}
-              isBiMonthlySection={isBiMonthlySection}
-              autoFocus={newRowFocus.current === row.localId}
+              autoFocus={newRowFocus.current === row.localId || focusedRowId === row.localId}
               focused={focusedRowId === row.localId}
+              categoryMode={categoryMode}
               onFocus={
                 onRowFocus ? () => onRowFocus(row.localId) : undefined
               }
@@ -462,6 +528,7 @@ export default function BudgetItemTable({
                   ? () => onAdvancedModeRequest(row.localId)
                   : undefined
               }
+              advancedModeOpen={advancedModeRowId === row.localId}
             />
           ))}
         </AnimatePresence>

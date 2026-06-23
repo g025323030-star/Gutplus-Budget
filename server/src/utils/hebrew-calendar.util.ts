@@ -43,6 +43,20 @@ function getHebrewHolidayDate(holiday: Holiday, hebrewYear: number): HebrewHolid
       return { day: 6, monthName: 'Sivan' };
     case Holiday.TU_BISHVAT:
       return { day: 15, monthName: 'Shevat' };
+    case Holiday.SIMCHAT_TORAH:
+      // מנהג ארץ ישראל — מאוחד עם שמיני עצרת
+      return { day: 22, monthName: 'Tishri' };
+    case Holiday.LAG_BAOMER:
+      return { day: 18, monthName: 'Iyyar' };
+    case Holiday.SUMMER_VACATION:
+      // אין תאריך עברי "חג" קבוע — מעוגן בתשעה באב, תחילת החופש הגדול
+      return { day: 9, monthName: 'Av' };
+    case Holiday.HASIDIS_EVENT:
+      // אין לאירוע חסידי תאריך עברי קבוע — המשתמש קובע את החודש ידנית
+      // דרך assignedMonth, ופונקציה זו לא נקראת לערך הזה (ראו summary.service).
+      throw new Error(
+        'HASIDIS_EVENT has no fixed Hebrew date — month must be supplied via assignedMonth',
+      );
     default: {
       const _exhaustive: never = holiday;
       throw new Error(`Unknown holiday: ${_exhaustive}`);
