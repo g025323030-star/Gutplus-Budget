@@ -5,11 +5,16 @@ import {
   TableProperties,
   Wallet,
 } from 'lucide-react';
+import type { BudgetLineItem, Category } from '@gutplus/shared';
 import { ICON_STROKE } from '../../constants/ui';
 import { getBudgetForecast } from '../../services/forecast.service';
+import { getLineItems } from '../../services/execution.service';
+import { getCategories } from '../../services/categories.service';
 import { buildBudgetView, type ViewMode } from './budget.utils';
 import MonthCarousel from './components/MonthCarousel';
 import BudgetKpiCards from './components/BudgetKpiCards';
+import BudgetCategoryCards from './components/BudgetCategoryCards';
+import BudgetComparisonChart from './components/BudgetComparisonChart';
 import SingleMonthView from './components/SingleMonthView';
 import YearlySpreadsheetView from './components/YearlySpreadsheetView';
 
@@ -66,6 +71,10 @@ export default function BudgetPlannerContainer() {
   const [forecast, setForecast] = useState<
     Awaited<ReturnType<typeof getBudgetForecast>>
   >([]);
+  // Line items per rolling-window month, indexed the same way as `forecast`
+  // (lineItemsByMonth[i] are the items for forecast[i]).
+  const [lineItemsByMonth, setLineItemsByMonth] = useState<BudgetLineItem[][]>([]);
+  const [categories, setCategories] = useState<Category[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -74,12 +83,33 @@ export default function BudgetPlannerContainer() {
 
   useEffect(() => {
     let cancelled = false;
-    const fetchForecast = async () => {
+    const fetchAll = async () => {
       setIsLoading(true);
       setError(null);
       try {
         const months = await getBudgetForecast();
-        if (!cancelled) setForecast(months);
+        if (cancelled) return;
+        setForecast(months);
+
+        const [lineItemsResult, categoriesResult] = await Promise.allSettled([
+          Promise.all(months.map((m) => getLineItems(m.month, m.year))),
+          getCategories(),
+        ]);
+        if (cancelled) return;
+
+        if (lineItemsResult.status === 'fulfilled') {
+          setLineItemsByMonth(lineItemsResult.value);
+        } else {
+          console.error('Error loading budget line items:', lineItemsResult.reason);
+          setLineItemsByMonth(months.map(() => []));
+        }
+
+        if (categoriesResult.status === 'fulfilled') {
+          setCategories(categoriesResult.value);
+        } else {
+          console.error('Error loading categories:', categoriesResult.reason);
+          setCategories([]);
+        }
       } catch (err) {
         console.error('Error loading budget forecast:', err);
         if (!cancelled) setError('שגיאה בטעינת התקציב. נסה לרענן את הדף.');
@@ -87,7 +117,7 @@ export default function BudgetPlannerContainer() {
         if (!cancelled) setIsLoading(false);
       }
     };
-    fetchForecast();
+    fetchAll();
     return () => {
       cancelled = true;
     };
@@ -95,6 +125,23 @@ export default function BudgetPlannerContainer() {
 
   const data = useMemo(() => buildBudgetView(forecast), [forecast]);
   const hasData = forecast.length > 0;
+
+  const categoryById = useMemo(() => {
+    const map = new Map<string, Category>();
+    categories.forEach((c) => map.set(c.id, c));
+    return map;
+  }, [categories]);
+
+  const selectedMonthMeta = forecast[selectedMonth];
+  const selectedLineItems = lineItemsByMonth[selectedMonth] ?? [];
+
+  const handleLineItemsChange = (monthIndex: number, items: BudgetLineItem[]) => {
+    setLineItemsByMonth((prev) => {
+      const next = [...prev];
+      next[monthIndex] = items;
+      return next;
+    });
+  };
 
   return (
     <div className="p-6 md:p-8 space-y-6">
@@ -136,11 +183,18 @@ export default function BudgetPlannerContainer() {
                   selectedMonth={selectedMonth}
                   onSelect={setSelectedMonth}
                 />
-                <BudgetKpiCards
+                <BudgetCategoryCards
                   data={data}
                   monthIndex={selectedMonth}
-                  period="month"
+                  month={selectedMonthMeta?.month ?? 1}
+                  year={selectedMonthMeta?.year ?? new Date().getFullYear()}
+                  lineItems={selectedLineItems}
+                  categoryById={categoryById}
+                  onLineItemsChange={(items) =>
+                    handleLineItemsChange(selectedMonth, items)
+                  }
                 />
+                <BudgetComparisonChart data={data} lineItemsByMonth={lineItemsByMonth} />
                 <SingleMonthView data={data} monthIndex={selectedMonth} />
               </>
             ) : (
