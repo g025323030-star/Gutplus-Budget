@@ -768,6 +768,7 @@ export default function ExpensesPage() {
         totalAmount={advancedModeRow?.amount ?? ''}
         onClose={() => setAdvancedModeForRowId(null)}
         onConfirm={handleAdvancedModeConfirm}
+        showInstallments={activeTab === 'yearly'}
       />
 
       <CategoryFormModal
