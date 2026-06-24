@@ -5,22 +5,6 @@ import type { MonthlySummary } from '@gutplus/shared';
 const apiUrl = (path: string): string =>
   import.meta.env.VITE_SERVER_URL + path;
 
-const emptySummary = (): MonthlySummary => ({
-  incomes: { monthly: 0, yearly: 0 },
-  expenses: {
-    monthly: 0,
-    yearly: 0,
-    yearlySpread: 0,
-    yearlyThisMonth: 0,
-    holidays: 0,
-    installments: 0,
-    breakouts: [],
-  },
-  debtRepayments: 0,
-  balanceBeforeDebts: 0,
-  balanceAfterDebts: 0,
-});
-
 const round2 = (n: number): number => Math.round(n * 100) / 100;
 
 export const getSummary = async (
@@ -33,52 +17,79 @@ export const getSummary = async (
   return res.data.data as MonthlySummary;
 };
 
-// Sums several monthly summaries into one aggregate (used for the yearly view,
-// which rolls up 12 sequential months).
-export const aggregateSummaries = (
-  summaries: MonthlySummary[],
-): MonthlySummary =>
-  summaries.reduce<MonthlySummary>((acc, s) => {
-    acc.incomes.monthly = round2(acc.incomes.monthly + s.incomes.monthly);
-    acc.incomes.yearly = round2(acc.incomes.yearly + s.incomes.yearly);
-    acc.expenses.monthly = round2(acc.expenses.monthly + s.expenses.monthly);
-    acc.expenses.yearly = round2(acc.expenses.yearly + s.expenses.yearly);
-    acc.expenses.yearlySpread = round2(
-      acc.expenses.yearlySpread + (s.expenses.yearlySpread ?? 0),
-    );
-    acc.expenses.yearlyThisMonth = round2(
-      acc.expenses.yearlyThisMonth + (s.expenses.yearlyThisMonth ?? 0),
-    );
-    acc.expenses.holidays = round2(acc.expenses.holidays + s.expenses.holidays);
-    acc.expenses.installments = round2(
-      acc.expenses.installments + s.expenses.installments,
-    );
-    for (const b of s.expenses.breakouts ?? []) {
-      const existing = acc.expenses.breakouts.find((x) => x.name === b.name);
-      if (existing) {
-        existing.amount = round2(existing.amount + b.amount);
-      } else {
-        acc.expenses.breakouts.push({ name: b.name, amount: b.amount });
-      }
-    }
-    acc.debtRepayments = round2(acc.debtRepayments + s.debtRepayments);
-    acc.balanceBeforeDebts = round2(
-      acc.balanceBeforeDebts + s.balanceBeforeDebts,
-    );
-    acc.balanceAfterDebts = round2(acc.balanceAfterDebts + s.balanceAfterDebts);
-    return acc;
-  }, emptySummary());
-
-// Fetches a rolling 12-month window starting at the given month/year and
-// returns the aggregated summary.
-export const getRollingYearSummary = async (
-  startMonth: number,
-  startYear: number,
+/**
+ * Fetches the exact-timing summary for a single month (dry-average disabled
+ * server-side via `exactTiming=true`) — each item counted only in its
+ * real-world month, at its real amount. Used by `getAnnualSummary`; not
+ * intended for the monthly Snapshot cards (those use `getSummary`, which
+ * keeps the dry-average default).
+ */
+const getExactTimingSummary = async (
+  month: number,
+  year: number,
 ): Promise<MonthlySummary> => {
-  const calls = Array.from({ length: 12 }, (_, i) => {
-    const d = new Date(startYear, startMonth - 1 + i, 1);
-    return getSummary(d.getMonth() + 1, d.getFullYear());
+  const res = await axios.get(apiUrl(ENDPOINTS.summary.base), {
+    params: { month, year, exactTiming: true },
   });
+  return res.data.data as MonthlySummary;
+};
+
+export interface AnnualSummary {
+  /** Sum of incomes.yearly across all 12 calendar months (exact-timing). */
+  totalIncome: number;
+  /** Sum of expenses.yearly + holidays + installments + breakouts across all 12 calendar months (exact-timing). */
+  totalExpenses: number;
+  /** Sum of debtRepayments across all 12 calendar months (exact-timing). */
+  totalDebtRepayments: number;
+  /** totalIncome - totalExpenses. */
+  balanceBeforeDebts: number;
+  /** balanceBeforeDebts - totalDebtRepayments. */
+  balanceAfterDebts: number;
+}
+
+/**
+ * Fetches a strictly-annual summary for the given calendar year (Jan-Dec).
+ *
+ * Deliberately reads ONLY the non-monthly buckets from each month's
+ * exact-timing summary (`incomes.yearly`, and
+ * `expenses.yearly + holidays + installments + breakouts`) — `incomes.monthly`
+ * and `expenses.monthly` are never read here, on purpose: blending a plain
+ * monthly recurring item ×12 into an "annual" total would double-count money
+ * that's already represented by the monthly Snapshot cards. This function
+ * answers a different question — "how much did genuinely annual-type items
+ * (yearly/holiday/installment/one-time) cost across the whole year" — using
+ * each item's real-world month and real amount (exactTiming=true), not a
+ * smoothed monthly share.
+ */
+export const getAnnualSummary = async (year: number): Promise<AnnualSummary> => {
+  const calls = Array.from({ length: 12 }, (_, i) => getExactTimingSummary(i + 1, year));
   const summaries = await Promise.all(calls);
-  return aggregateSummaries(summaries);
+
+  let totalIncome = 0;
+  let totalExpenses = 0;
+  let totalDebtRepayments = 0;
+
+  for (const s of summaries) {
+    totalIncome += s.incomes.yearly;
+    totalExpenses +=
+      s.expenses.yearly +
+      s.expenses.holidays +
+      s.expenses.installments +
+      (s.expenses.breakouts ?? []).reduce((sum, b) => sum + b.amount, 0);
+    totalDebtRepayments += s.debtRepayments;
+  }
+
+  totalIncome = round2(totalIncome);
+  totalExpenses = round2(totalExpenses);
+  totalDebtRepayments = round2(totalDebtRepayments);
+  const balanceBeforeDebts = round2(totalIncome - totalExpenses);
+  const balanceAfterDebts = round2(balanceBeforeDebts - totalDebtRepayments);
+
+  return {
+    totalIncome,
+    totalExpenses,
+    totalDebtRepayments,
+    balanceBeforeDebts,
+    balanceAfterDebts,
+  };
 };

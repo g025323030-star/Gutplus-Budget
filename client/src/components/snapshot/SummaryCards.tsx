@@ -66,7 +66,11 @@ export default function SummaryCards({ summary }: SummaryCardsProps) {
     (sum, b) => sum + b.amount,
     0,
   );
-  const totalIncome = incomes.monthly + incomes.yearly;
+
+  // Card 1 — household consumption: every dry monthly-average EXPENSE
+  // bucket, explicitly excluding debtRepayments (debt is a separate
+  // financial obligation, not household consumption — matches the existing
+  // balanceBeforeDebts separation elsewhere).
   const totalExpenses =
     expenses.monthly +
     expenses.yearly +
@@ -75,7 +79,9 @@ export default function SummaryCards({ summary }: SummaryCardsProps) {
     breakoutsTotal;
   const specialBundle =
     expenses.yearly + expenses.holidays + expenses.installments + breakoutsTotal;
-  const totalOutflow = totalExpenses + debtRepayments;
+
+  // Card 2 — dry monthly-average INCOME total.
+  const totalIncome = incomes.monthly + incomes.yearly;
 
   const balanceBefore = summary.balanceBeforeDebts;
   const balanceAfter = summary.balanceAfterDebts;
@@ -84,9 +90,28 @@ export default function SummaryCards({ summary }: SummaryCardsProps) {
 
   return (
     <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-      {/* Card 1 — Income overview */}
+      {/* Card 1 — how much our home consumes */}
       <CardShell
-        label="תמונת מצב הכנסות"
+        label="כמה הבית שלנו צורך"
+        icon={
+          <TrendingDown
+            className="text-red-500"
+            size={22}
+            strokeWidth={ICON_STROKE}
+          />
+        }
+      >
+        <p className="heading-3 text-red-500 mb-3">{formatILS(totalExpenses)}</p>
+        <SubRow label="הוצאות קבועות" value={expenses.monthly} />
+        <SubRow
+          label="הוצאות שנתיות/חגים/תשלומים (ממוצע חודשי)"
+          value={specialBundle}
+        />
+      </CardShell>
+
+      {/* Card 2 — our monthly income */}
+      <CardShell
+        label="ההכנסות החודשיות שלנו"
         icon={
           <TrendingUp
             className="text-green-500"
@@ -97,39 +122,33 @@ export default function SummaryCards({ summary }: SummaryCardsProps) {
       >
         <p className="heading-3 text-green-500 mb-3">{formatILS(totalIncome)}</p>
         <SubRow label="הכנסות שוטפות חודשיות" value={incomes.monthly} />
-        <SubRow label="הכנסות שנתיות שחלות החודש" value={incomes.yearly} />
+        <SubRow label="הכנסות שנתיות (ממוצע חודשי)" value={incomes.yearly} />
       </CardShell>
 
-      {/* Card 2 — Expenses & debt */}
-      <CardShell
-        label="הוצאות והתחייבויות"
-        icon={
-          <TrendingDown
-            className="text-red-500"
-            size={22}
-            strokeWidth={ICON_STROKE}
-          />
-        }
-      >
-        <p className="heading-3 text-red-500 mb-3">{formatILS(totalOutflow)}</p>
-        <SubRow label="הוצאות חודשיות" value={expenses.monthly} />
-        <SubRow label="שנתיות / חגים / תשלומים" value={specialBundle} />
-        <SubRow
-          label="סה״כ החזרי חובות"
-          value={debtRepayments}
-          bordered
-          valueClassName="text-primary font-semibold"
-        />
-      </CardShell>
-
-      {/* Card 3 — Remaining balances */}
+      {/* Card 3 — summary: income vs. expenses, debt, net balance */}
       <CardShell
         label="יתרות פיננסיות"
         icon={
           <Wallet className="text-accent" size={22} strokeWidth={ICON_STROKE} />
         }
       >
-        <div className="flex items-center justify-between gap-3 mb-3">
+        <SubRow
+          label="הכנסות"
+          value={totalIncome}
+          valueClassName="text-green-500"
+        />
+        <SubRow
+          label="הוצאות"
+          value={totalExpenses}
+          valueClassName="text-red-500"
+        />
+        <SubRow
+          label="החזרי חובות"
+          value={debtRepayments}
+          bordered
+          valueClassName="text-primary font-semibold"
+        />
+        <div className="flex items-center justify-between gap-3 mt-1.5 pt-2.5 border-t border-slate-100">
           <span className="body-text-sm text-slate-500">
             יתרה ללא החזרי חובות
           </span>
@@ -137,7 +156,7 @@ export default function SummaryCards({ summary }: SummaryCardsProps) {
             {formatILS(balanceBefore)}
           </span>
         </div>
-        <div className="pt-2.5 border-t border-slate-100">
+        <div className="pt-2.5 border-t border-slate-100 mt-1.5">
           <span className="body-text-sm text-slate-500">
             יתרה כולל החזרי חובות
           </span>

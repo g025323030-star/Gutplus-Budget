@@ -35,3 +35,16 @@ export interface MonthlySummary {
 }
 
 export type GetSummaryResponse = SuccessResponse<MonthlySummary>;
+
+/** Query params accepted by `GET /summary`. */
+export interface GetSummaryQuery {
+  month: number;
+  year: number;
+  /**
+   * When true, disables dry-average and uses exact-timing semantics instead
+   * (each item counted only in its real-world month, at its real amount).
+   * Defaults to false/absent, which preserves the dry-average behavior used
+   * by the monthly Snapshot cards.
+   */
+  exactTiming?: boolean;
+}
