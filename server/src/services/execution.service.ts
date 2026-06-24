@@ -1,11 +1,79 @@
 import { Repository } from 'typeorm';
-import type { BudgetLineItem } from '@gutplus/shared';
+import type { BudgetLineItem, BudgetLineItemBucket } from '@gutplus/shared';
+import { CategoryFrequency, CategoryType } from '@gutplus/shared';
 import { AppDataSource } from '../config/data-source';
 import { BudgetItem } from '../entities/budget-item.entity';
 import { BudgetItemExecution } from '../entities/budget-item-execution.entity';
+import { Category } from '../entities/category.entity';
 import { getMonthSlots, monthSlotKey, MonthSlot } from '../utils/rolling-window.util';
-import { isItemIncludedInMonth, isYearlySpreadItem, getContributingAmount } from './summary.service';
+import {
+  isItemIncludedInMonth,
+  isYearlySpreadItem,
+  getContributingAmount,
+  resolveCategoryBreakdowns,
+} from './summary.service';
 import { computeYearlySpreadDistribution } from './budget-line-item.service';
+
+// ---------------------------------------------------------------------------
+// Line-item bucket classification
+// ---------------------------------------------------------------------------
+
+/**
+ * Classifies a single budget item into the `BudgetLineItemBucket` matching
+ * the Budget page row it already appears under (see `budget.utils.ts`'s
+ * `buildBudgetView`).
+ *
+ * IMPORTANT: must stay in sync with `aggregateMonth`'s bucketing branches in
+ * `summary.service.ts`. This is a deliberate, separate duplication of ~15
+ * lines of stable branching logic — `aggregateMonth` has 76 passing tests
+ * riding on its exact current structure, so it is NOT refactored to share
+ * this function. If the bucketing rules in `aggregateMonth` ever change,
+ * update this function to match.
+ */
+export function classifyLineItemBucket(
+  item: BudgetItem,
+  categoryType: CategoryType | undefined,
+  debtCategoryIds: Set<string>,
+  breakoutCategoryIds: Map<string, Set<string>>,
+): { bucket: BudgetLineItemBucket; breakoutName?: string } {
+  const categoryId = item.category?.id;
+
+  // Debt category — takes priority over income/expense bucketing.
+  if (categoryId !== undefined && categoryId !== null && debtCategoryIds.has(categoryId)) {
+    return { bucket: 'debt' };
+  }
+
+  if (categoryType === CategoryType.INCOME) {
+    const isPlainMonthly =
+      item.frequency === CategoryFrequency.MONTHLY &&
+      item.baseMonth === null &&
+      item.installmentGroupId === null &&
+      !item.isOneTime &&
+      item.holiday === null;
+    return { bucket: isPlainMonthly ? 'incomeMonthly' : 'incomeYearly' };
+  }
+
+  // EXPENSE — breakout subtree match takes priority, mirroring aggregateMonth.
+  for (const [name, ids] of breakoutCategoryIds) {
+    if (categoryId !== undefined && categoryId !== null && ids.has(categoryId)) {
+      return { bucket: 'breakout', breakoutName: name };
+    }
+  }
+
+  if (item.holiday !== null) {
+    return { bucket: 'expenseHolidays' };
+  }
+  if (item.installmentGroupId !== null) {
+    return { bucket: 'expenseInstallments' };
+  }
+  if (item.frequency === CategoryFrequency.MONTHLY) {
+    return { bucket: 'expenseMonthly' };
+  }
+  if (item.assignedMonth === null && !item.isOneTime) {
+    return { bucket: 'expenseYearlySpread' };
+  }
+  return { bucket: 'expenseYearlyThisMonth' };
+}
 
 export interface UpsertExecutionInput {
   forecastOverride?: string | null;
@@ -64,6 +132,10 @@ export class ExecutionService {
 
   private get budgetItemRepo(): Repository<BudgetItem> {
     return AppDataSource.getRepository(BudgetItem);
+  }
+
+  private get categoryRepo(): Repository<Category> {
+    return AppDataSource.getRepository(Category);
   }
 
   /**
@@ -159,12 +231,20 @@ export class ExecutionService {
       throw err;
     }
 
-    // 1. Load every household item.
+    // 1. Load every household item (with its category, needed both for the
+    // existing categoryId field and the new bucket classification below).
     const items = await this.budgetItemRepo
       .createQueryBuilder('item')
       .innerJoin('item.household', 'household')
+      .leftJoinAndSelect('item.category', 'category')
       .where('household.id = :householdId', { householdId })
       .getMany();
+
+    // 1b. Resolve debt + breakout category subtrees for bucket classification.
+    const { debtIds, breakouts } = await resolveCategoryBreakdowns(
+      this.categoryRepo,
+      householdId,
+    );
 
     // 2. Load every execution row falling in the forward window (covers all
     // item types — needed for non-yearly-spread items' actual/override too).
@@ -227,6 +307,13 @@ export class ExecutionService {
         isFrozen = true;
       }
 
+      const { bucket, breakoutName } = classifyLineItemBucket(
+        item,
+        item.category?.type,
+        debtIds,
+        breakouts,
+      );
+
       lineItems.push({
         budgetItemId: item.id,
         description: item.description,
@@ -237,6 +324,8 @@ export class ExecutionService {
         currentForecast,
         actual,
         isFrozen,
+        bucket,
+        ...(breakoutName !== undefined ? { breakoutName } : {}),
       });
     }
 

@@ -1,6 +1,6 @@
 import { TrendingDown, TrendingUp, Wallet } from 'lucide-react';
 import type { MonthlySummary } from '@gutplus/shared';
-import { ICON_STROKE } from '../../constants/ui';
+import { ICON_STROKE } from '../../../constants/ui';
 
 interface SummaryCardsProps {
   summary: MonthlySummary;

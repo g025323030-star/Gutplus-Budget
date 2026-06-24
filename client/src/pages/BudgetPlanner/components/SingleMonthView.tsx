@@ -1,3 +1,5 @@
+import type { BudgetLineItem } from '@gutplus/shared';
+import { upsertExecution } from '../../../services/execution.service';
 import {
   calculateExpenseTotal,
   calculateIncomeTotal,
@@ -5,27 +7,17 @@ import {
   type BudgetRow,
   type BudgetViewData,
 } from '../budget.utils';
+import AccordionRow from './AccordionRow';
 
 interface SingleMonthViewProps {
   data: BudgetViewData;
   monthIndex: number;
-}
-
-interface LineProps {
-  label: string;
-  value: number;
-  valueClassName: string;
-}
-
-function Line({ label, value, valueClassName }: LineProps) {
-  return (
-    <div className="flex items-center justify-between gap-3 bg-surface rounded-xl border border-slate-100 shadow-sm px-4 py-3">
-      <span className="body-text-sm text-slate-600">{label}</span>
-      <span className={`body-text font-semibold ${valueClassName}`}>
-        {formatILS(value)}
-      </span>
-    </div>
-  );
+  /** The selected month's resolved line items (same indexing as `data`'s rows). */
+  lineItems: BudgetLineItem[];
+  /** Gregorian month/year for `monthIndex`, needed by `upsertExecution`. */
+  month: number;
+  year: number;
+  onLineItemsChange: (items: BudgetLineItem[]) => void;
 }
 
 interface ColumnProps {
@@ -36,6 +28,11 @@ interface ColumnProps {
   rows: BudgetRow[];
   monthIndex: number;
   valueClassName: string;
+  lineItems: BudgetLineItem[];
+  onCommit: (
+    budgetItemId: string,
+    patch: { forecastOverride?: string } | { actual?: string },
+  ) => Promise<void>;
 }
 
 function Column({
@@ -46,6 +43,8 @@ function Column({
   rows,
   monthIndex,
   valueClassName,
+  lineItems,
+  onCommit,
 }: ColumnProps) {
   return (
     <div className={`border-r-4 ${accentClass} pr-4`}>
@@ -57,11 +56,13 @@ function Column({
       </div>
       <div className="space-y-2">
         {rows.map((row) => (
-          <Line
+          <AccordionRow
             key={row.key}
             label={row.label}
             value={row.values[monthIndex] ?? 0}
             valueClassName={valueClassName}
+            items={row.matchesLineItem ? lineItems.filter(row.matchesLineItem) : []}
+            onCommit={onCommit}
           />
         ))}
       </div>
@@ -72,10 +73,25 @@ function Column({
 export default function SingleMonthView({
   data,
   monthIndex,
+  lineItems,
+  month,
+  year,
+  onLineItemsChange,
 }: SingleMonthViewProps) {
   const incomeTotal = calculateIncomeTotal(data, monthIndex);
   const expenseTotal = calculateExpenseTotal(data, monthIndex);
   const expenseRows = [...data.expenseRows, data.debtRow];
+
+  const handleCommit = async (
+    budgetItemId: string,
+    patch: { forecastOverride?: string } | { actual?: string },
+  ): Promise<void> => {
+    await upsertExecution(budgetItemId, month, year, patch);
+    const next = lineItems.map((item) =>
+      item.budgetItemId === budgetItemId ? { ...item, ...patch } : item,
+    );
+    onLineItemsChange(next);
+  };
 
   return (
     <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
@@ -87,6 +103,8 @@ export default function SingleMonthView({
         rows={data.incomeRows}
         monthIndex={monthIndex}
         valueClassName="text-emerald-600"
+        lineItems={lineItems}
+        onCommit={handleCommit}
       />
       <Column
         title="הוצאות"
@@ -96,6 +114,8 @@ export default function SingleMonthView({
         rows={expenseRows}
         monthIndex={monthIndex}
         valueClassName="text-rose-600"
+        lineItems={lineItems}
+        onCommit={handleCommit}
       />
     </div>
   );

@@ -1,4 +1,4 @@
-import type { MonthlyForecast } from '@gutplus/shared';
+import type { BudgetLineItem, BudgetLineItemBucket, MonthlyForecast } from '@gutplus/shared';
 import { HEBREW_MONTHS } from '../../constants/months';
 
 export type ViewMode = 'dashboard' | 'sheet';
@@ -8,6 +8,12 @@ export interface BudgetRow {
   key: string;
   label: string;
   values: number[];
+  /**
+   * Predicate selecting this row's matching `BudgetLineItem`s for the
+   * accordion drill-down on the dashboard view (see `SingleMonthView.tsx`).
+   * Optional because `YearlySpreadsheetView`/`BudgetKpiCards` don't need it.
+   */
+  matchesLineItem?: (item: BudgetLineItem) => boolean;
 }
 
 export interface BudgetViewData {
@@ -37,16 +43,21 @@ export function buildBudgetView(forecast: MonthlyForecast[]): BudgetViewData {
     (m) => `${HEBREW_MONTHS[m.month - 1]} (${m.month})`,
   );
 
+  const bucketIs = (bucket: BudgetLineItemBucket) => (item: BudgetLineItem) =>
+    item.bucket === bucket;
+
   const incomeRows: BudgetRow[] = [
     {
       key: 'income_monthly',
       label: 'הכנסות שוטפות חודשיות',
       values: forecast.map((m) => m.incomes.monthly),
+      matchesLineItem: bucketIs('incomeMonthly'),
     },
     {
       key: 'income_yearly',
       label: 'הכנסות שנתיות',
       values: forecast.map((m) => m.incomes.yearly),
+      matchesLineItem: bucketIs('incomeYearly'),
     },
   ];
 
@@ -55,26 +66,33 @@ export function buildBudgetView(forecast: MonthlyForecast[]): BudgetViewData {
       key: 'expense_recurring',
       label: 'הוצאות שוטפות',
       values: forecast.map((m) => m.expenses.monthly + m.expenses.installments),
+      matchesLineItem: (item) =>
+        item.bucket === 'expenseMonthly' || item.bucket === 'expenseInstallments',
     },
     {
       key: 'expense_yearly_spread',
       label: 'הוצאות שנתיות (פריסה ל-12)',
       values: forecast.map((m) => m.expenses.yearlySpread),
+      matchesLineItem: bucketIs('expenseYearlySpread'),
     },
     {
       key: 'expense_yearly_this_month',
       label: 'הוצאות שנתיות שחלות החודש',
       values: forecast.map((m) => m.expenses.yearlyThisMonth),
+      matchesLineItem: bucketIs('expenseYearlyThisMonth'),
     },
     {
       key: 'expense_holidays',
       label: 'הוצאות חגים',
       values: forecast.map((m) => m.expenses.holidays),
+      matchesLineItem: bucketIs('expenseHolidays'),
     },
     ...Object.entries(BREAKOUT_LABELS).map(([name, label]) => ({
       key: `breakout_${name}`,
       label,
       values: forecast.map((m) => breakoutAmount(m, name)),
+      matchesLineItem: (item: BudgetLineItem) =>
+        item.bucket === 'breakout' && item.breakoutName === name,
     })),
   ];
 
@@ -82,6 +100,7 @@ export function buildBudgetView(forecast: MonthlyForecast[]): BudgetViewData {
     key: 'debt',
     label: 'החזרי חובות',
     values: forecast.map((m) => m.debtRepayments),
+    matchesLineItem: bucketIs('debt'),
   };
 
   return { monthLabels, incomeRows, expenseRows, debtRow };

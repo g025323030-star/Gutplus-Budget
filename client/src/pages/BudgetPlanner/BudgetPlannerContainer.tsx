@@ -5,15 +5,14 @@ import {
   TableProperties,
   Wallet,
 } from 'lucide-react';
-import type { BudgetLineItem, Category } from '@gutplus/shared';
+import type { BudgetLineItem } from '@gutplus/shared';
 import { ICON_STROKE } from '../../constants/ui';
 import { getBudgetForecast } from '../../services/forecast.service';
 import { getLineItems } from '../../services/execution.service';
-import { getCategories } from '../../services/categories.service';
 import { buildBudgetView, type ViewMode } from './budget.utils';
 import MonthCarousel from './components/MonthCarousel';
 import BudgetKpiCards from './components/BudgetKpiCards';
-import BudgetCategoryCards from './components/BudgetCategoryCards';
+import SummaryCards from './components/SummaryCards';
 import BudgetComparisonChart from './components/BudgetComparisonChart';
 import SingleMonthView from './components/SingleMonthView';
 import YearlySpreadsheetView from './components/YearlySpreadsheetView';
@@ -74,7 +73,6 @@ export default function BudgetPlannerContainer() {
   // Line items per rolling-window month, indexed the same way as `forecast`
   // (lineItemsByMonth[i] are the items for forecast[i]).
   const [lineItemsByMonth, setLineItemsByMonth] = useState<BudgetLineItem[][]>([]);
-  const [categories, setCategories] = useState<Category[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -91,24 +89,15 @@ export default function BudgetPlannerContainer() {
         if (cancelled) return;
         setForecast(months);
 
-        const [lineItemsResult, categoriesResult] = await Promise.allSettled([
-          Promise.all(months.map((m) => getLineItems(m.month, m.year))),
-          getCategories(),
-        ]);
-        if (cancelled) return;
-
-        if (lineItemsResult.status === 'fulfilled') {
-          setLineItemsByMonth(lineItemsResult.value);
-        } else {
-          console.error('Error loading budget line items:', lineItemsResult.reason);
-          setLineItemsByMonth(months.map(() => []));
-        }
-
-        if (categoriesResult.status === 'fulfilled') {
-          setCategories(categoriesResult.value);
-        } else {
-          console.error('Error loading categories:', categoriesResult.reason);
-          setCategories([]);
+        try {
+          const lineItemsPerMonth = await Promise.all(
+            months.map((m) => getLineItems(m.month, m.year)),
+          );
+          if (cancelled) return;
+          setLineItemsByMonth(lineItemsPerMonth);
+        } catch (lineItemsErr) {
+          console.error('Error loading budget line items:', lineItemsErr);
+          if (!cancelled) setLineItemsByMonth(months.map(() => []));
         }
       } catch (err) {
         console.error('Error loading budget forecast:', err);
@@ -125,12 +114,6 @@ export default function BudgetPlannerContainer() {
 
   const data = useMemo(() => buildBudgetView(forecast), [forecast]);
   const hasData = forecast.length > 0;
-
-  const categoryById = useMemo(() => {
-    const map = new Map<string, Category>();
-    categories.forEach((c) => map.set(c.id, c));
-    return map;
-  }, [categories]);
 
   const selectedMonthMeta = forecast[selectedMonth];
   const selectedLineItems = lineItemsByMonth[selectedMonth] ?? [];
@@ -183,19 +166,18 @@ export default function BudgetPlannerContainer() {
                   selectedMonth={selectedMonth}
                   onSelect={setSelectedMonth}
                 />
-                <BudgetCategoryCards
+                {selectedMonthMeta && <SummaryCards summary={selectedMonthMeta} />}
+                <BudgetComparisonChart data={data} lineItemsByMonth={lineItemsByMonth} />
+                <SingleMonthView
                   data={data}
                   monthIndex={selectedMonth}
+                  lineItems={selectedLineItems}
                   month={selectedMonthMeta?.month ?? 1}
                   year={selectedMonthMeta?.year ?? new Date().getFullYear()}
-                  lineItems={selectedLineItems}
-                  categoryById={categoryById}
                   onLineItemsChange={(items) =>
                     handleLineItemsChange(selectedMonth, items)
                   }
                 />
-                <BudgetComparisonChart data={data} lineItemsByMonth={lineItemsByMonth} />
-                <SingleMonthView data={data} monthIndex={selectedMonth} />
               </>
             ) : (
               <>
