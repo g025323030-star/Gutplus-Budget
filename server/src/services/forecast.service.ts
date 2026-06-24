@@ -5,6 +5,8 @@ import { BudgetItem } from '../entities/budget-item.entity';
 import { Category } from '../entities/category.entity';
 import { aggregateMonth, resolveCategoryBreakdowns } from './summary.service';
 import { exchangeRateService } from './exchange-rate.service';
+import { buildForecastOverrides } from './execution.service';
+import { getMonthSlots } from '../utils/rolling-window.util';
 
 // ---------------------------------------------------------------------------
 // ForecastService
@@ -23,16 +25,18 @@ export class ForecastService {
    * Computes a 12-month rolling forecast starting from the current month.
    *
    * Each month uses `effectiveAmount = targetAmount ?? amount` as the
-   * contributing value for every included item.
+   * contributing value for every included item, unless an execution
+   * override/redistribution applies for that item+month (see
+   * `buildForecastOverrides`) — this keeps the per-row line items
+   * (`/budget-executions/line-items`) and these KPI totals consistent by
+   * construction, since both read through the same overrides map.
    *
    * @param householdId - UUID of the household.
    * @returns An array of 12 MonthlyForecast entries in chronological order.
    */
   async computeForecast(householdId: string): Promise<MonthlyForecast[]> {
-    // 1. Determine rolling window start: current month
-    const now = new Date();
-    const startMonth = now.getMonth() + 1; // 1-12
-    const startYear = now.getFullYear();
+    // 1. Determine rolling window: current month + next 11 (with year rollover)
+    const forwardSlots = getMonthSlots(new Date(), 0, 12);
 
     // 2. Load all budget items for this household with their categories (once)
     const items = await this.budgetItemRepo
@@ -62,19 +66,19 @@ export class ForecastService {
     const forecastAmountResolver = (item: BudgetItem): string =>
       item.targetAmount ?? item.amount;
 
-    // 6. Iterate over 12 months (with year rollover)
+    // 6. Build the unified execution-overrides map (yearly-spread
+    // redistribution + plain forecastOverride passthrough) once for the
+    // whole window.
+    const forecastOverrides = await buildForecastOverrides(
+      householdId,
+      items,
+      forwardSlots,
+    );
+
+    // 7. Iterate over the 12 forward slots
     const results: MonthlyForecast[] = [];
 
-    for (let offset = 0; offset < 12; offset++) {
-      let month = startMonth + offset;
-      let year = startYear;
-
-      // Handle year rollover
-      if (month > 12) {
-        month -= 12;
-        year += 1;
-      }
-
+    for (const { month, year } of forwardSlots) {
       const { summary, hadTargetAmount } = aggregateMonth(
         items,
         debtIds,
@@ -83,6 +87,8 @@ export class ForecastService {
         month,
         year,
         forecastAmountResolver,
+        undefined,
+        forecastOverrides,
       );
 
       results.push({

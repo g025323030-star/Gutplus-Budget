@@ -1,6 +1,11 @@
 import { z } from 'zod';
 import { CategoryFrequency, CurrencyCode, Holiday, TransactionFrequency } from '../enums';
-import { decimalStringSchema, isoDateStringSchema, uuidSchema } from './common.schemas';
+import {
+  decimalStringSchema,
+  isoDateStringSchema,
+  monthSchema,
+  uuidSchema,
+} from './common.schemas';
 
 const PLAIN_DATE_REGEX = /^\d{4}-\d{2}-\d{2}$/;
 
@@ -17,8 +22,6 @@ const dateInputSchema = z
     }
     return value;
   });
-
-const monthSchema = z.number().int().min(1).max(12);
 
 export const budgetItemEntitySchema = z.object({
   id: uuidSchema,

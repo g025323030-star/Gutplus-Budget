@@ -329,7 +329,10 @@ describe('SummaryService.computeSummary', () => {
     expect(result.incomes.yearly).toBe(0);
   });
 
-  it('yearly income item with assignedMonth goes to incomes.yearly', async () => {
+  it('yearly income item with assignedMonth goes to incomes.yearly as a dry ÷12 average', async () => {
+    // computeSummary uses the Snapshot-only dry-average path: a yearly item
+    // anchored to one month no longer spikes that month — it contributes
+    // amount/12 to every month instead (computeDryMonthlyAverage).
     const item = makeItem({
       amount: '3000.00',
       frequency: CategoryFrequency.YEARLY,
@@ -339,7 +342,7 @@ describe('SummaryService.computeSummary', () => {
     setupItems([item]);
 
     const result = await service.computeSummary('hh-1', 6, 2026);
-    expect(result.incomes.yearly).toBe(3000);
+    expect(result.incomes.yearly).toBe(250); // 3000 / 12
     expect(result.incomes.monthly).toBe(0);
   });
 
@@ -377,7 +380,9 @@ describe('SummaryService.computeSummary', () => {
     expect(result.expenses.monthly).toBe(500);
   });
 
-  it('holiday expense item (priority) goes to expenses.holidays', async () => {
+  it('holiday expense item (priority) goes to expenses.holidays as a dry ÷12 average, every month', async () => {
+    // Dry-average mode includes holiday items in every month (not just their
+    // Hebrew-calendar month) at amount/12 — no more once-a-year spike.
     mockGetErevHolidayGregorianMonth.mockReturnValue(6); // June
     const item = makeItem({
       amount: '800.00',
@@ -387,10 +392,15 @@ describe('SummaryService.computeSummary', () => {
     });
     setupItems([item]);
 
-    const result = await service.computeSummary('hh-1', 6, 2026);
-    expect(result.expenses.holidays).toBe(800);
-    expect(result.expenses.monthly).toBe(0);
-    expect(result.expenses.yearly).toBe(0);
+    const june = await service.computeSummary('hh-1', 6, 2026);
+    expect(june.expenses.holidays).toBeCloseTo(66.67, 2); // 800 / 12
+    expect(june.expenses.monthly).toBe(0);
+    expect(june.expenses.yearly).toBe(0);
+
+    // A month that is NOT the holiday's Hebrew-calendar month still gets the
+    // same dry average — dry-average ignores seasonality entirely.
+    const september = await service.computeSummary('hh-1', 9, 2026);
+    expect(september.expenses.holidays).toBeCloseTo(66.67, 2);
   });
 
   it('installment expense item goes to expenses.installments (full amount, not divided)', async () => {
@@ -546,7 +556,10 @@ describe('SummaryService.computeSummary', () => {
     expect(result.balanceAfterDebts).toBe(8500);     // no debt
   });
 
-  it('splits yearly into spread (÷12) and this-month buckets; yearly = their sum', async () => {
+  it('splits yearly into spread (÷12) and this-month buckets; both are dry ÷12 averages', async () => {
+    // Dry-average mode collapses yearly-anchored items into the same ÷12
+    // math as yearly-spread items — they land in different buckets
+    // (yearlySpread vs. yearlyThisMonth) but both contribute amount/12.
     const spread = makeItem({
       id: 'item-spread',
       amount: '1200.00',
@@ -565,8 +578,8 @@ describe('SummaryService.computeSummary', () => {
 
     const result = await service.computeSummary('hh-1', 6, 2026);
     expect(result.expenses.yearlySpread).toBe(100);     // 1200 / 12
-    expect(result.expenses.yearlyThisMonth).toBe(600);
-    expect(result.expenses.yearly).toBe(700);
+    expect(result.expenses.yearlyThisMonth).toBe(50);   // 600 / 12
+    expect(result.expenses.yearly).toBe(150);
   });
 
   // -------------------------------------------------------------------------
@@ -605,7 +618,9 @@ describe('SummaryService.computeSummary', () => {
     expect(jan.expenses.monthly).toBe(400);
   });
 
-  it('yearly assignedMonth=12 item included in December but not January', async () => {
+  it('yearly assignedMonth=12 item is a dry ÷12 average in both December and January', async () => {
+    // Dry-average mode ignores the assignedMonth anchor entirely — the item
+    // contributes amount/12 in every month, not just its anchor month.
     const item = makeItem({
       amount: '600.00',
       frequency: CategoryFrequency.YEARLY,
@@ -617,8 +632,8 @@ describe('SummaryService.computeSummary', () => {
     const dec = await service.computeSummary('hh-1', 12, 2025);
     const jan = await service.computeSummary('hh-1', 1, 2026);
 
-    expect(dec.expenses.yearly).toBe(600);
-    expect(jan.expenses.yearly).toBe(0);
+    expect(dec.expenses.yearly).toBe(50); // 600 / 12
+    expect(jan.expenses.yearly).toBe(50); // 600 / 12
   });
 
   // -------------------------------------------------------------------------

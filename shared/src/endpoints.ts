@@ -45,4 +45,7 @@ export const ENDPOINTS = {
   budgetForecast: {
     base: 'budget-forecast',
   },
+  budgetExecutions: {
+    base: 'budget-executions',
+  },
 } as const;
