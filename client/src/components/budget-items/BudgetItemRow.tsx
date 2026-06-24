@@ -203,7 +203,8 @@ export default function BudgetItemRow({
   const formattedAmount = (() => {
     const num = parseFloat(row.amount);
     if (!Number.isFinite(num) || num <= 0) return '—';
-    return formatCurrency(row.amount, row.currency ?? CurrencyCode.ILS);
+    const displayAmount = row.baseMonth !== null ? (num / 2).toFixed(2) : row.amount;
+    return formatCurrency(displayAmount, row.currency ?? CurrencyCode.ILS);
   })();
 
   // Schedule text for view mode
