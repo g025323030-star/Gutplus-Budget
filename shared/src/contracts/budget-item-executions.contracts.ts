@@ -2,6 +2,22 @@ import type { BudgetItemExecution } from '../types';
 import type { SuccessResponse } from './common.contracts';
 
 /**
+ * Classification bucket for a `BudgetLineItem`, mirroring the row groupings
+ * already rendered on the Budget page (see `budget.utils.ts`'s
+ * `buildBudgetView` and `summary.service.ts`'s `aggregateMonth`).
+ */
+export type BudgetLineItemBucket =
+  | 'incomeMonthly'
+  | 'incomeYearly'
+  | 'expenseMonthly'
+  | 'expenseYearlySpread'
+  | 'expenseYearlyThisMonth'
+  | 'expenseHolidays'
+  | 'expenseInstallments'
+  | 'debt'
+  | 'breakout';
+
+/**
  * A single budget item's resolved execution figures for one month of the
  * Budget page's forward window.
  *
@@ -31,6 +47,14 @@ export interface BudgetLineItem {
    * open share still being computed dynamically.
    */
   isFrozen: boolean;
+  /**
+   * Which Budget-page row this item belongs to (income/expense bucket, debt,
+   * or a named breakout). See `classifyLineItemBucket` in
+   * `execution.service.ts` for the classification logic.
+   */
+  bucket: BudgetLineItemBucket;
+  /** Set only when `bucket === 'breakout'` — the matched breakout's name. */
+  breakoutName?: string;
 }
 
 export type GetBudgetLineItemsResponse = SuccessResponse<{
