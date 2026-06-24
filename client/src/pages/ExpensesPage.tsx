@@ -114,9 +114,9 @@ export default function ExpensesPage() {
   const [activeTab, setActiveTab] = useState<'monthly' | 'yearly'>('monthly');
   const [selectedMainCategoryId, setSelectedMainCategoryId] = useState<string | null>(null);
 
-  // Monthly mode: unified main table + opposite-parity widget
+  // Monthly mode: unified main table (every row shown every month, both
+  // currently-due and off-parity bi-monthly items mixed into the one list)
   const [mainRows, setMainRows] = useState<DraftRow[]>([]);
-  const [nextMonthRows, setNextMonthRows] = useState<DraftRow[]>([]);
   // Yearly mode: yearly general rows
   const [yearlyRows, setYearlyRows] = useState<DraftRow[]>([]);
   // Running total per holiday, summed from the full unfiltered BudgetItem list
@@ -181,8 +181,8 @@ export default function ExpensesPage() {
 
   // Combined rows (all tables) — used for focused-row lookup, needsReview counts, etc.
   const allRows = useMemo(
-    () => [...mainRows, ...nextMonthRows, ...yearlyRows],
-    [mainRows, nextMonthRows, yearlyRows],
+    () => [...mainRows, ...yearlyRows],
+    [mainRows, yearlyRows],
   );
 
   useEffect(() => {
@@ -248,27 +248,22 @@ export default function ExpensesPage() {
           .filter((r): r is DraftRow => r !== null);
 
         if (activeTab === 'monthly') {
-          // Collapse installment siblings into single representative rows
+          // Collapse installment siblings into single representative rows.
+          // No parity filter — every row shows every month, both
+          // currently-due and off-parity bi-monthly items mixed into the
+          // one list (BudgetItemRow already halves the displayed amount
+          // for bi-monthly rows).
           const grouped = groupInstallmentRows(draftRows, selectedMonth, selectedYear);
-          const activeThisMonth = (r: DraftRow) =>
-            r.baseMonth == null || r.baseMonth % 2 === selectedMonth % 2;
-          setMainRows(grouped.filter(activeThisMonth));
-          setNextMonthRows(
-            grouped.filter(
-              (r) => r.baseMonth != null && r.baseMonth % 2 !== selectedMonth % 2,
-            ),
-          );
+          setMainRows(grouped);
           setYearlyRows([]);
         } else {
           // YEARLY
           setYearlyRows(draftRows);
           setMainRows([]);
-          setNextMonthRows([]);
         }
       } else {
         console.error('Error loading transactions:', txResult.reason);
         setMainRows([]);
-        setNextMonthRows([]);
         setYearlyRows([]);
         setHolidayTotals({});
         setError('שגיאה בטעינת ההוצאות. נסה לרענן את הדף.');
@@ -461,7 +456,6 @@ export default function ExpensesPage() {
           };
         });
       setMainRows(applyAdvanced);
-      setNextMonthRows(applyAdvanced);
       setYearlyRows(applyAdvanced);
       setAdvancedModeForRowId(null);
     },
@@ -490,7 +484,6 @@ export default function ExpensesPage() {
               : r,
           );
         setMainRows(applyCategory);
-        setNextMonthRows(applyCategory);
         setYearlyRows(applyCategory);
       }
       setAddCategoryForRowId(null);
@@ -621,18 +614,18 @@ export default function ExpensesPage() {
         </motion.div>
       )}
 
-      {/* ======== MONTHLY mode: unified table + next-month widget + helper panel ======== */}
+      {/* ======== MONTHLY mode: unified table + helper panel ======== */}
       {activeTab === 'monthly' && (
         <motion.div
           variants={ITEM_VARIANTS}
           className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start"
         >
           <div className="lg:col-span-8 space-y-6">
-            {/* Unified main table: fixed + installments + current-parity bi-monthly */}
+            {/* Unified main table: fixed + installments + bi-monthly (every row, every month) */}
             <section>
               <RubricHeader
                 title="הוצאות החודש"
-                subtitle="הוצאות קבועות, תשלומים והוצאות דו-חודשיות פעילות בחודש זה"
+                subtitle="הוצאות קבועות, תשלומים והוצאות דו-חודשיות"
               />
               <BudgetItemTable
                 rows={mainRows}
@@ -659,34 +652,6 @@ export default function ExpensesPage() {
                 sortable
               />
             </section>
-
-            {/* Next-month widget: opposite-parity bi-monthly rows */}
-            {nextMonthRows.length > 0 && (
-              <section>
-                <RubricHeader
-                  title=""
-                  subtitle="עסקאות אלו יחויבו בחודש הבא. ניתן לערוך אך לא להוסיף שורות"
-                />
-                <BudgetItemTable
-                  rows={nextMonthRows}
-                  categories={expenseCategories}
-                  householdId={householdId}
-                  frequency={CategoryFrequency.MONTHLY}
-                  monthConstraint={selectedMonth}
-                  yearConstraint={selectedYear}
-                  onChange={setNextMonthRows}
-                  hideAddRow
-                  compact
-                  categoryMode="label"
-                  onAdvancedModeRequest={handleAdvancedModeRequest}
-                  advancedModeRowId={advancedModeForRowId}
-                  onAfterAdvancedModeSave={handleAfterAdvancedModeSave}
-                  onAddCategoryRequest={handleAddCategoryRequest}
-                  title="עסקאות דו-חודשיות שיחוייבו בחודש הבא"
-                  descriptionPlaceholder="לדוגמה: חשמל"
-                />
-              </section>
-            )}
           </div>
 
           <div className="lg:col-span-4">
