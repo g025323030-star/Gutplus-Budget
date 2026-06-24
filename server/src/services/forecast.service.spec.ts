@@ -13,12 +13,21 @@
 
 const mockBudgetItemGetMany = jest.fn<any, any>();
 const mockCategoryFind = jest.fn<any, any>();
+const mockExecutionGetMany = jest.fn<any, any>();
 
 const budgetItemQB: any = {
   innerJoin: jest.fn().mockReturnThis(),
   leftJoinAndSelect: jest.fn().mockReturnThis(),
   where: jest.fn().mockReturnThis(),
   getMany: mockBudgetItemGetMany,
+};
+
+const executionQB: any = {
+  innerJoin: jest.fn().mockReturnThis(),
+  leftJoinAndSelect: jest.fn().mockReturnThis(),
+  where: jest.fn().mockReturnThis(),
+  andWhere: jest.fn().mockReturnThis(),
+  getMany: mockExecutionGetMany,
 };
 
 const mockBudgetItemRepo = {
@@ -29,12 +38,17 @@ const mockCategoryRepo = {
   find: mockCategoryFind,
 };
 
+const mockExecutionRepo = {
+  createQueryBuilder: jest.fn(() => executionQB),
+};
+
 jest.mock('../config/data-source', () => ({
   AppDataSource: {
     getRepository: jest.fn((entity: any) => {
       const name = typeof entity === 'function' ? entity.name : String(entity);
       if (name === 'BudgetItem') return mockBudgetItemRepo;
       if (name === 'Category') return mockCategoryRepo;
+      if (name === 'BudgetItemExecution') return mockExecutionRepo;
       return {};
     }),
   },
@@ -127,6 +141,7 @@ describe('ForecastService.computeForecast', () => {
     jest.clearAllMocks();
     mockGetErevHolidayGregorianMonth.mockReturnValue(9); // default: September
     mockCategoryFind.mockResolvedValue([]);
+    mockExecutionGetMany.mockResolvedValue([]); // no execution rows by default
     service = new ForecastService();
   });
 

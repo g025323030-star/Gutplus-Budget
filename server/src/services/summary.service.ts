@@ -19,7 +19,7 @@ import { getErevHolidayGregorianMonth } from '../utils/hebrew-calendar.util';
 // ---------------------------------------------------------------------------
 
 /** Parse a decimal string to integer cents (multiply by 100, floor). */
-function toCents(value: string): bigint {
+export function toCents(value: string): bigint {
   const [intPart, fracPart = ''] = value.replace('-', '').split('.');
   const isNegative = value.startsWith('-');
   const normalized = fracPart.padEnd(2, '0').slice(0, 2);
@@ -28,12 +28,37 @@ function toCents(value: string): bigint {
 }
 
 /** Format bigint cents back to a number rounded to 2 decimal places. */
-function centsToNumber(cents: bigint): number {
+export function centsToNumber(cents: bigint): number {
   const sign = cents < 0n ? -1 : 1;
   const abs = cents < 0n ? -cents : cents;
   const intPart = abs / 100n;
   const fracPart = abs % 100n;
   return sign * parseFloat(`${intPart}.${String(fracPart).padStart(2, '0')}`);
+}
+
+/**
+ * Splits `totalCents` into `count` integer-cent shares that sum back to
+ * exactly `totalCents`. Each share is either `floor` or `floor + 1`; the
+ * remainder cents go to the first N slots (in order). Generalizes the
+ * single-value ÷12 remainder-distribution rounding rule used by
+ * {@link getContributingAmount} into an N-way split.
+ */
+export function distributeEvenly(totalCents: bigint, count: number): bigint[] {
+  if (count <= 0) {
+    return [];
+  }
+  const countBig = BigInt(count);
+  const isNegative = totalCents < 0n;
+  const abs = isNegative ? -totalCents : totalCents;
+  const base = abs / countBig;
+  const remainder = abs % countBig;
+
+  const shares: bigint[] = [];
+  for (let i = 0; i < count; i++) {
+    const share = i < remainder ? base + 1n : base;
+    shares.push(isNegative ? -share : share);
+  }
+  return shares;
 }
 
 // ---------------------------------------------------------------------------
@@ -106,6 +131,26 @@ export function isItemIncludedInMonth(
 }
 
 /**
+ * True for a "yearly-spread" item: a YEARLY-frequency item with no
+ * assignedMonth, no holiday, not one-time, and not part of an installment
+ * group — i.e. its annual amount is divided evenly across all 12 months
+ * rather than landing in one specific month.
+ *
+ * Used to decide whether redistribution math applies when *reading* a line
+ * item back (see `budget-line-item.service.ts`) — it does not gate whether a
+ * write to `ExecutionService.upsert` is allowed; every item type is loggable.
+ */
+export function isYearlySpreadItem(item: BudgetItem): boolean {
+  return (
+    item.frequency === CategoryFrequency.YEARLY &&
+    item.assignedMonth === null &&
+    item.holiday === null &&
+    !item.isOneTime &&
+    item.installmentGroupId === null
+  );
+}
+
+/**
  * Returns the contributing amount string for this item in the queried month.
  * Handles yearly spread (÷12) and otherwise returns the resolved base amount unchanged.
  *
@@ -116,15 +161,9 @@ export function isItemIncludedInMonth(
  *
  * Precondition: `isItemIncludedInMonth` must have returned true for this item.
  */
-function getContributingAmount(item: BudgetItem, amountResolver: (item: BudgetItem) => string): string {
+export function getContributingAmount(item: BudgetItem, amountResolver: (item: BudgetItem) => string): string {
   // Yearly spread (no assignedMonth, no holiday, not isOneTime, no installmentGroupId)
-  if (
-    item.frequency === CategoryFrequency.YEARLY &&
-    item.assignedMonth === null &&
-    item.holiday === null &&
-    !item.isOneTime &&
-    item.installmentGroupId === null
-  ) {
+  if (isYearlySpreadItem(item)) {
     // Divide by 12, decimal-safe
     const cents = toCents(amountResolver(item));
     const monthly = cents / 12n;
@@ -134,6 +173,97 @@ function getContributingAmount(item: BudgetItem, amountResolver: (item: BudgetIt
     return centsToNumber(rounded).toFixed(2);
   }
   return amountResolver(item);
+}
+
+// ---------------------------------------------------------------------------
+// Dry-average algorithm (Snapshot only) — ignores timing/seasonality
+// ---------------------------------------------------------------------------
+
+/**
+ * Snapshot-only inclusion test: every item is included in every month
+ * ("ignore timing entirely"), except one-time items which are excluded
+ * altogether (matching the existing TransactionsList filtering behavior on
+ * the Snapshot screen today). Unlike `isItemIncludedInMonth`, this never
+ * varies by *seasonality* — bimonthly, holiday, and yearly-anchored items are
+ * all "always included" here; only `computeDryMonthlyAverage` decides how
+ * much of their amount counts per month. The `endDate` lifecycle check is
+ * preserved unchanged: an item that has stopped recurring should not count
+ * toward "what this household costs per month" for months after it ended,
+ * same as the exact-timing path.
+ *
+ * @param month - Gregorian month 1-12, used only for the endDate lifecycle check.
+ * @param year  - Gregorian year, used only for the endDate lifecycle check.
+ */
+function isItemIncludedInDryAverage(
+  item: BudgetItem,
+  month: number,
+  year: number,
+): boolean {
+  if (item.endDate) {
+    const end = item.endDate instanceof Date ? item.endDate : new Date(item.endDate);
+    const firstOfMonth = new Date(year, month - 1, 1);
+    if (end < firstOfMonth) {
+      return false;
+    }
+  }
+
+  if (item.isOneTime) {
+    return false;
+  }
+  return true;
+}
+
+/**
+ * Snapshot-only "ignore timing" contribution for one month of `item`:
+ * - plain monthly (no `baseMonth`) → `item.amount` unchanged.
+ * - bimonthly (`baseMonth` set) → `item.amount ÷ 2`.
+ * - yearly-spread → `item.amount ÷ 12` (existing math, unchanged).
+ * - yearly-anchored / holiday (incl. `HASIDIS_EVENT`) → annual amount ÷ 12,
+ *   included in every month instead of only its anchor/holiday month.
+ * - installments → unchanged (already "monthly-shaped" while active).
+ *
+ * One-time items are excluded entirely by `isItemIncludedInDryAverage`
+ * before this function is ever called.
+ */
+export function computeDryMonthlyAverage(item: BudgetItem): string {
+  // Installments are already monthly-shaped while active — no averaging.
+  if (item.installmentGroupId !== null) {
+    return item.amount;
+  }
+
+  // Holiday item (incl. HASIDIS_EVENT) — annual amount ÷ 12 every month.
+  if (item.holiday !== null) {
+    return divideCentsBy(toCents(item.amount), 12);
+  }
+
+  // YEARLY frequency
+  if (item.frequency === CategoryFrequency.YEARLY) {
+    // Both yearly-spread (no assignedMonth) and yearly-anchored
+    // (assignedMonth set) collapse to the same ÷12 dry average.
+    return divideCentsBy(toCents(item.amount), 12);
+  }
+
+  // MONTHLY frequency
+  if (item.frequency === CategoryFrequency.MONTHLY) {
+    // Bi-monthly (baseMonth set): full amount only lands every other month,
+    // so its dry monthly average is half.
+    if (item.baseMonth !== null) {
+      return divideCentsBy(toCents(item.amount), 2);
+    }
+    // Plain monthly: unchanged.
+    return item.amount;
+  }
+
+  return item.amount;
+}
+
+/** Divides `cents` by `divisor`, rounding half-up, same rule as the existing ÷12. */
+function divideCentsBy(cents: bigint, divisor: number): string {
+  const divisorBig = BigInt(divisor);
+  const quotient = cents / divisorBig;
+  const remainder = cents % divisorBig;
+  const rounded = remainder * 2n >= divisorBig ? quotient + 1n : quotient;
+  return centsToNumber(rounded).toFixed(2);
 }
 
 // ---------------------------------------------------------------------------
@@ -224,6 +354,19 @@ export interface AggregateMonthResult {
  * @param amountResolver  - Returns the base amount string for a given item.
  *                          Summary: `(i) => i.amount`
  *                          Forecast: `(i) => i.targetAmount ?? i.amount`
+ * @param dryAverage       - Snapshot-only. When true, swaps `isItemIncludedInMonth`
+ *                          for the always-included-except-one-time dry-average
+ *                          inclusion check, and `getContributingAmount` for
+ *                          `computeDryMonthlyAverage`. Purely additive: omitting
+ *                          this param (the Forecast/Budget call sites) leaves
+ *                          behavior byte-for-byte unchanged. Mutually exclusive
+ *                          with `forecastOverrides` in practice (Snapshot never
+ *                          passes overrides; Forecast never passes dryAverage).
+ * @param forecastOverrides - Forecast-only. Map of `${budgetItemId}:${month}:${year}`
+ *                          to a final, pre-currency-conversion amount string that
+ *                          replaces `getContributingAmount`'s result verbatim when
+ *                          present. `convertToIls` still runs on it unchanged.
+ *                          `SummaryService.computeSummary` never passes this.
  */
 export function aggregateMonth(
   items: BudgetItem[],
@@ -233,6 +376,8 @@ export function aggregateMonth(
   month: number,
   year: number,
   amountResolver: (item: BudgetItem) => string,
+  dryAverage?: boolean,
+  forecastOverrides?: Map<string, string>,
 ): AggregateMonthResult {
   // Helper: convert amount string to ILS using pre-fetched rate map
   const convertToIls = (amount: string, currency: CurrencyCode): bigint => {
@@ -279,7 +424,10 @@ export function aggregateMonth(
   };
 
   for (const item of items) {
-    if (!isItemIncludedInMonth(item, month, year)) {
+    const isIncluded = dryAverage
+      ? isItemIncludedInDryAverage(item, month, year)
+      : isItemIncludedInMonth(item, month, year);
+    if (!isIncluded) {
       continue;
     }
 
@@ -288,7 +436,14 @@ export function aggregateMonth(
       hadTargetAmount = true;
     }
 
-    const contributingAmountStr = getContributingAmount(item, amountResolver);
+    const overrideKey = forecastOverrides ? `${item.id}:${month}:${year}` : undefined;
+    const override = overrideKey ? forecastOverrides!.get(overrideKey) : undefined;
+    const contributingAmountStr =
+      override !== undefined
+        ? override
+        : dryAverage
+          ? computeDryMonthlyAverage(item)
+          : getContributingAmount(item, amountResolver);
     const ilsCents = convertToIls(contributingAmountStr, item.currency);
 
     const categoryType = item.category?.type;
@@ -452,7 +607,10 @@ export class SummaryService {
       }),
     );
 
-    // 4. Delegate to shared aggregation engine with the summary amount resolver
+    // 4. Delegate to shared aggregation engine with the summary amount resolver.
+    // dryAverage: true — Snapshot ignores timing/seasonality entirely (see
+    // computeDryMonthlyAverage); this is the only call site that ever passes
+    // dryAverage, and it never passes forecastOverrides.
     const { summary } = aggregateMonth(
       items,
       debtIds,
@@ -461,6 +619,7 @@ export class SummaryService {
       month,
       year,
       (item) => item.amount,
+      true,
     );
 
     return summary;

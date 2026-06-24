@@ -8,3 +8,4 @@ export { budgetItemService } from './budget-item.service';
 export { exchangeRateService } from './exchange-rate.service';
 export { summaryService } from './summary.service';
 export { forecastService } from './forecast.service';
+export { executionService } from './execution.service';

@@ -4,5 +4,6 @@ export * from './family-member.types';
 export * from './account.types';
 export * from './category.types';
 export * from './budget-item.types';
+export * from './budget-item-execution.types';
 export * from './token.types';
 export * from './holiday-expense-template.types';

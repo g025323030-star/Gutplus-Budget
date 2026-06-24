@@ -7,3 +7,4 @@ export { familyMemberController } from './family-member.controller';
 export { budgetItemController } from './budget-item.controller';
 export { summaryController } from './summary.controller';
 export { forecastController } from './forecast.controller';
+export { budgetItemExecutionController } from './budget-item-execution.controller';
