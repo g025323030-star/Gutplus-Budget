@@ -2,9 +2,9 @@ import { useEffect, useMemo, useState } from 'react';
 import {
   AlertCircle,
   LayoutDashboard,
+  Scale,
   TrendingDown,
   TrendingUp,
-  Wallet,
 } from 'lucide-react';
 import type { BudgetItem, Category, MonthlySummary } from '@gutplus/shared';
 import { ICON_STROKE } from '../constants/ui';
@@ -14,7 +14,7 @@ import { getSummary, getAnnualSummary } from '../services/summary.service';
 import type { AnnualSummary } from '../services/summary.service';
 import PeriodToggle from '../components/snapshot/PeriodToggle';
 import type { PeriodMode } from '../components/snapshot/PeriodToggle';
-import SummaryCards from '../components/snapshot/SummaryCards';
+import SnapshotMonthlyOverview from '../components/snapshot/SnapshotMonthlyOverview';
 import CategoryPieChart from '../components/snapshot/CategoryPieChart';
 import TransactionsList from '../components/snapshot/TransactionsList';
 
@@ -25,62 +25,73 @@ const currencyFormatter = new Intl.NumberFormat('he-IL', {
 });
 const formatILS = (value: number): string => currencyFormatter.format(value);
 
-interface AnnualSummaryCardProps {
+interface AnnualKpiCardProps {
+  label: string;
+  value: number;
+  icon: React.ReactNode;
+  valueClassName: string;
+}
+
+// A single macro card — matches BudgetKpiCards.tsx's KpiCard visual pattern
+// (label + icon header, one bold figure), without importing from BudgetPlanner/.
+function AnnualKpiCard({ label, value, icon, valueClassName }: AnnualKpiCardProps) {
+  return (
+    <div className="bg-surface rounded-2xl shadow-sm border border-slate-100 p-6 transition-all duration-300 hover:shadow-md">
+      <div className="flex items-center justify-between mb-3">
+        <span className="label-text">{label}</span>
+        {icon}
+      </div>
+      <p className={`heading-3 ${valueClassName}`}>{formatILS(value)}</p>
+    </div>
+  );
+}
+
+interface AnnualSummaryCardsProps {
   summary: AnnualSummary;
 }
 
-// Dedicated annual breakdown — strictly annual-type totals only (yearly /
-// holiday / installment / one-time items, real exact-timing amounts, summed
-// across the calendar year). Deliberately not a reuse of SummaryCards, which
-// is shaped around the monthly dry-average buckets.
-function AnnualSummaryCard({ summary }: AnnualSummaryCardProps) {
+// Strictly 3 macro cards — Total Income / Annual Expenses / Net Balance —
+// sourced from the existing AnnualSummary shape. Debt repayments are folded
+// into "Net Balance" (balanceAfterDebts already nets them out) rather than
+// shown as a separate 4th card; they remain visible in the monthly overview.
+function AnnualSummaryCards({ summary }: AnnualSummaryCardsProps) {
   const balanceClass =
     summary.balanceAfterDebts >= 0 ? 'text-green-500' : 'text-red-500';
 
   return (
-    <div className="bg-surface rounded-2xl shadow-sm border border-slate-100 p-6">
-      <div className="flex items-center justify-between mb-4">
-        <span className="label-text">סיכום שנתי</span>
-        <Wallet className="text-accent" size={22} strokeWidth={ICON_STROKE} />
-      </div>
-      <div className="flex items-center justify-between gap-3 py-1.5">
-        <span className="body-text-sm text-slate-500 flex items-center gap-2">
+    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+      <AnnualKpiCard
+        label="סך הכנסות שנתיות"
+        value={summary.totalIncome}
+        icon={
           <TrendingUp
             className="text-green-500"
-            size={18}
+            size={22}
             strokeWidth={ICON_STROKE}
           />
-          הכנסות שנתיות
-        </span>
-        <span className="body-text font-medium text-green-500">
-          {formatILS(summary.totalIncome)}
-        </span>
-      </div>
-      <div className="flex items-center justify-between gap-3 py-1.5">
-        <span className="body-text-sm text-slate-500 flex items-center gap-2">
+        }
+        valueClassName="text-green-500"
+      />
+      <AnnualKpiCard
+        label="הוצאות שנתיות"
+        value={summary.totalExpenses}
+        icon={
           <TrendingDown
             className="text-red-500"
-            size={18}
+            size={22}
             strokeWidth={ICON_STROKE}
           />
-          הוצאות שנתיות
-        </span>
-        <span className="body-text font-medium text-red-500">
-          {formatILS(summary.totalExpenses)}
-        </span>
-      </div>
-      <div className="flex items-center justify-between gap-3 py-1.5">
-        <span className="body-text-sm text-slate-500">החזרי חובות</span>
-        <span className="body-text font-medium text-primary">
-          {formatILS(summary.totalDebtRepayments)}
-        </span>
-      </div>
-      <div className="flex items-center justify-between gap-3 mt-1.5 pt-2.5 border-t border-slate-100">
-        <span className="body-text-sm text-slate-500">יתרה שנתית נטו</span>
-        <p className={`heading-3 ${balanceClass}`}>
-          {formatILS(summary.balanceAfterDebts)}
-        </p>
-      </div>
+        }
+        valueClassName="text-red-500"
+      />
+      <AnnualKpiCard
+        label="יתרה שנתית נטו"
+        value={summary.balanceAfterDebts}
+        icon={
+          <Scale className="text-accent" size={22} strokeWidth={ICON_STROKE} />
+        }
+        valueClassName={balanceClass}
+      />
     </div>
   );
 }
@@ -260,24 +271,27 @@ export default function SnapshotPage() {
         !error && (
           <>
             {mode === 'monthly' && summary && (
-              <SummaryCards summary={summary} />
+              <SnapshotMonthlyOverview summary={summary} />
             )}
             {mode === 'yearly' && annualSummary && (
-              <AnnualSummaryCard summary={annualSummary} />
+              <AnnualSummaryCards summary={annualSummary} />
             )}
 
-            <CategoryPieChart
-              transactions={periodTransactions}
-              categoryById={categoryById}
-              mode={mode}
-            />
+            {mode === 'monthly' && (
+              <>
+                <CategoryPieChart
+                  transactions={periodTransactions}
+                  categoryById={categoryById}
+                  mode={mode}
+                />
 
-            <TransactionsList
-              mode={mode}
-              transactions={periodTransactions}
-              categoryById={categoryById}
-              year={selectedYear}
-            />
+                <TransactionsList
+                  mode={mode}
+                  transactions={periodTransactions}
+                  categoryById={categoryById}
+                />
+              </>
+            )}
           </>
         )
       )}
