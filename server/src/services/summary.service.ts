@@ -577,11 +577,22 @@ export class SummaryService {
    * @param householdId - UUID of the household.
    * @param month       - Gregorian month 1-12.
    * @param year        - Gregorian year.
+   * @param dryAverage  - When true (default), every item contributes an
+   *                      evenly-smoothed monthly share regardless of its real
+   *                      timing (see `computeDryMonthlyAverage`) — this is the
+   *                      existing Snapshot monthly-card behavior and the
+   *                      default preserves it byte-for-byte for every existing
+   *                      caller. When explicitly passed `false`, items are
+   *                      included using exact-timing semantics
+   *                      (`isItemIncludedInMonth` / `getContributingAmount`)
+   *                      instead — used by the Annual tab, which sums 12
+   *                      exact-timing months rather than 12 dry averages.
    */
   async computeSummary(
     householdId: string,
     month: number,
     year: number,
+    dryAverage: boolean = true,
   ): Promise<MonthlySummary> {
     // 1. Load all budget items for this household with their categories
     const items = await this.budgetItemRepo
@@ -608,9 +619,11 @@ export class SummaryService {
     );
 
     // 4. Delegate to shared aggregation engine with the summary amount resolver.
-    // dryAverage: true — Snapshot ignores timing/seasonality entirely (see
-    // computeDryMonthlyAverage); this is the only call site that ever passes
-    // dryAverage, and it never passes forecastOverrides.
+    // dryAverage defaults to true — Snapshot's monthly cards ignore
+    // timing/seasonality entirely (see computeDryMonthlyAverage). Passing
+    // `false` (Annual tab / exactTiming=true query param) switches to
+    // exact-timing semantics instead. This is the only call site that ever
+    // passes dryAverage, and it never passes forecastOverrides.
     const { summary } = aggregateMonth(
       items,
       debtIds,
@@ -619,7 +632,7 @@ export class SummaryService {
       month,
       year,
       (item) => item.amount,
-      true,
+      dryAverage,
     );
 
     return summary;

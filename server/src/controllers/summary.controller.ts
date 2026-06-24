@@ -43,7 +43,17 @@ export class SummaryController {
         return;
       }
 
-      const data = await summaryService.computeSummary(household.id, monthRaw, yearRaw);
+      // exactTiming=true disables dry-average (used by the Annual tab, which
+      // needs each item's real-world timing/amount instead of a smoothed
+      // monthly share). Absent/false preserves the default dry-average
+      // behavior used by the monthly Snapshot cards.
+      const exactTiming = req.query.exactTiming === 'true';
+      const data = await summaryService.computeSummary(
+        household.id,
+        monthRaw,
+        yearRaw,
+        exactTiming ? false : undefined,
+      );
 
       res.status(200).json({ success: true, data });
     } catch (error) {
