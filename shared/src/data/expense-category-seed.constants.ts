@@ -153,4 +153,8 @@ export const EXPENSE_CATEGORY_SEED: ExpenseCategorySeed[] = [
       { name: 'החזר הלוואה - קרן/ גמ״ח' },
     ],
   },
+  {
+    name: 'ירידת פריון עבודה',
+    subCategories: [],
+  },
 ];

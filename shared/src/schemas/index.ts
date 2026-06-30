@@ -5,6 +5,5 @@ export * from './households.schemas';
 export * from './accounts.schemas';
 export * from './categories.schemas';
 export * from './family-members.schemas';
-export * from './budget-plans.schemas';
-export * from './transactions.schemas';
-export * from './recurring-transactions.schemas';
+export * from './budget-items.schemas';
+export * from './budget-item-executions.schemas';

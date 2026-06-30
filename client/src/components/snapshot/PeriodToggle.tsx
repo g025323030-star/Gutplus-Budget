@@ -1,46 +1,14 @@
-import { Calendar } from 'lucide-react';
-import { ICON_STROKE } from '../../constants/ui';
-
 export type PeriodMode = 'monthly' | 'yearly';
-
-const HEBREW_MONTHS = [
-  'ינואר',
-  'פברואר',
-  'מרץ',
-  'אפריל',
-  'מאי',
-  'יוני',
-  'יולי',
-  'אוגוסט',
-  'ספטמבר',
-  'אוקטובר',
-  'נובמבר',
-  'דצמבר',
-];
 
 interface PeriodToggleProps {
   mode: PeriodMode;
   onModeChange: (mode: PeriodMode) => void;
-  selectedMonth: number;
-  selectedYear: number;
-  onMonthChange: (month: number) => void;
-  onYearChange: (year: number) => void;
 }
 
 export default function PeriodToggle({
   mode,
   onModeChange,
-  selectedMonth,
-  selectedYear,
-  onMonthChange,
-  onYearChange,
 }: PeriodToggleProps) {
-  const currentYear = new Date().getFullYear();
-  const years: number[] = [];
-  for (let y = currentYear + 1; y >= currentYear - 5; y -= 1) {
-    years.push(y);
-  }
-
   return (
     <div className="bg-surface rounded-2xl shadow-sm border border-slate-100 p-4 flex flex-wrap items-center gap-3">
       <div
@@ -76,36 +44,6 @@ export default function PeriodToggle({
         >
           שנתי
         </button>
-      </div>
-
-      <div className="flex items-center gap-2 mr-auto">
-        <Calendar className="text-accent" size={18} strokeWidth={ICON_STROKE} />
-        {mode === 'monthly' && (
-          <select
-            value={selectedMonth}
-            onChange={(e) => onMonthChange(Number(e.target.value))}
-            aria-label="בחירת חודש"
-            className="bg-background border border-slate-100 rounded-lg px-3 py-2 label-text text-primary focus:outline-none focus:ring-2 focus:ring-accent"
-          >
-            {HEBREW_MONTHS.map((label, idx) => (
-              <option key={label} value={idx + 1}>
-                {label}
-              </option>
-            ))}
-          </select>
-        )}
-        <select
-          value={selectedYear}
-          onChange={(e) => onYearChange(Number(e.target.value))}
-          aria-label="בחירת שנה"
-          className="bg-background border border-slate-100 rounded-lg px-3 py-2 label-text text-primary focus:outline-none focus:ring-2 focus:ring-accent"
-        >
-          {years.map((year) => (
-            <option key={year} value={year}>
-              {year}
-            </option>
-          ))}
-        </select>
       </div>
     </div>
   );

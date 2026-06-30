@@ -133,6 +133,8 @@ if(!user){
       const onboardingCompleted = user?.onboardingCompleted ?? false;
       const expenseTemplatesInitialized =
         household?.expenseTemplatesInitialized ?? false;
+      const incomeTemplatesInitialized =
+        household?.incomeTemplatesInitialized ?? false;
       res.status(200).json({
         success: true,
         data: {
@@ -140,6 +142,7 @@ if(!user){
           householdId,
           onboardingCompleted,
           expenseTemplatesInitialized,
+          incomeTemplatesInitialized,
         },
       });
     } catch (error) {

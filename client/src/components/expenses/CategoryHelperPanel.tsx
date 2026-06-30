@@ -1,6 +1,6 @@
 import { useMemo } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
-import { Info, Sparkles } from 'lucide-react';
+import { ChevronDown, Info, Sparkles } from 'lucide-react';
 import type { Category } from '@gutplus/shared';
 import { ICON_STROKE } from '../../constants/ui';
 import { getCategoryVisual } from '../../data/category-visuals.constants';
@@ -13,173 +13,178 @@ interface CategoryHelperPanelProps {
   focusedRowIndex: number | null;
   onPickSubcategory: (categoryId: string) => void;
   isFirstUse?: boolean;
-  // onFillCategoryTemplates?: (mainId: string) => void;
   selectedMainId: string | null;
   onSelectedMainIdChange: (id: string | null) => void;
+  needsReviewCounts?: Record<string, number>;
+  selectedSubcategoryId: string | null;
 }
 
 export default function CategoryHelperPanel({
   mainCategories,
   allCategories,
-  focusedRowId,
-  focusedRowDescription,
-  focusedRowIndex,
+  focusedRowId: _focusedRowId,
+  focusedRowDescription: _focusedRowDescription,
+  focusedRowIndex: _focusedRowIndex,
   onPickSubcategory,
   isFirstUse = false,
-  // onFillCategoryTemplates,
   selectedMainId,
   onSelectedMainIdChange,
+  needsReviewCounts = {},
+  selectedSubcategoryId,
 }: CategoryHelperPanelProps) {
 
-  const subcategories = useMemo(() => {
-    if (!selectedMainId) return [];
-    return allCategories.filter((c) => c.parentCategoryId === selectedMainId);
-  }, [allCategories, selectedMainId]);
+  const mainCategoryReviewCounts = useMemo(() => {
+    const result: Record<string, number> = {};
+    for (const main of mainCategories) {
+      let count = needsReviewCounts[main.id] ?? 0;
+      for (const sub of allCategories) {
+        if (sub.parentCategoryId === main.id) {
+          count += needsReviewCounts[sub.id] ?? 0;
+        }
+      }
+      result[main.id] = count;
+    }
+    return result;
+  }, [mainCategories, allCategories, needsReviewCounts]);
 
-  const disabled = focusedRowId === null;
-  
-const handleCategoryClick = (catId: string) => {
-  onSelectedMainIdChange(catId);
-};
+  const handleAccordionToggle = (catId: string) => {
+    onSelectedMainIdChange(selectedMainId === catId ? null : catId);
+  };
 
   return (
     <aside
       aria-label="עוזר קטגוריות"
-      className="bg-surface rounded-2xl shadow-sm border border-slate-100 p-6 flex flex-col"
+      className="bg-surface rounded-2xl shadow-sm border border-slate-100 p-5 flex flex-col gap-4"
     >
-      <div className="mb-4">
+      <div>
         <h3 className="heading-3 flex items-center gap-2">
-          <Sparkles
-            className="text-accent"
-            size={18}
-            strokeWidth={ICON_STROKE}
-          />
+          <Sparkles className="text-accent" size={18} strokeWidth={ICON_STROKE} />
           עוזר קטגוריות מהיר
         </h3>
         <p className="body-text-sm text-slate-400 mt-1">
           {isFirstUse
-            ? 'לחצו על קטגוריה כדי למלא שורות פתיחה לרישום מהיר'
-            : 'בחר שורה מהטבלה, ולחץ על קטגוריה ותת-קטגוריה כדי להזין במהירות.'}
+            ? 'בחרו קטגוריה ותת-קטגוריה להוספה מהירה'
+            : 'לחצו על תת-קטגוריה להוספה מיידית לראש הטבלה'}
         </p>
       </div>
 
-      {isFirstUse ? null : focusedRowId !== null ? (
-        <div className="bg-accent/5 border border-accent/20 rounded-xl p-3 mb-6 flex items-center justify-between gap-2">
-          <div className="flex items-center gap-2 min-w-0">
-            <span className="w-2.5 h-2.5 rounded-full bg-accent animate-pulse shrink-0" />
-            <span className="body-text-sm font-bold text-accent">
-              מזין כעת לשורה{focusedRowIndex !== null ? ` #${focusedRowIndex + 1}` : ''}
-            </span>
-          </div>
-          <span className="body-text-sm font-semibold text-slate-400 truncate">
-            {focusedRowDescription || 'ללא תיאור'}
-          </span>
-        </div>
-      ) : (
-        <div className="bg-amber-50 border border-amber-200 rounded-xl p-3 mb-6 text-center body-text-sm text-amber-600 font-medium">
-          בחר שורה בטבלה כדי להתחיל להזין קטגוריות
-        </div>
-      )}
-
-      <div className="grid grid-cols-2 gap-3 mb-6">
+      <div className="flex flex-col gap-2">
         {mainCategories.map((cat) => {
           const visual = getCategoryVisual(cat.name);
           const Icon = visual.icon;
-          const isSelected = selectedMainId === cat.id;
+          const isOpen = selectedMainId === cat.id;
+          const reviewCount = mainCategoryReviewCounts[cat.id] ?? 0;
+          const catSubs = allCategories.filter((c) => c.parentCategoryId === cat.id);
+
           return (
-            <button
+            <div
               key={cat.id}
-              type="button"
-              onClick={() => handleCategoryClick(cat.id)}
-              aria-pressed={isSelected}
-              aria-label={
-                isFirstUse
-                  ? `מלא שורות פתיחה עבור ${cat.name}`
-                  : undefined
-              }
-              className={`p-3 rounded-xl border text-right flex flex-col justify-between h-20 transition-all duration-200 ${
-                isSelected
-                  ? 'bg-primary border-transparent text-white shadow-md'
-                  : 'bg-slate-50 hover:bg-slate-100/80 border-slate-200/60 text-primary'
+              className={`rounded-xl overflow-hidden border transition-colors duration-200 ${
+                isOpen ? visual.borderClass : 'border-slate-200'
               }`}
             >
-              <div
-                className={`w-7 h-7 rounded-lg flex items-center justify-center ${
-                  isSelected ? 'bg-white/10' : 'bg-white shadow-sm'
+              <button
+                type="button"
+                onClick={() => handleAccordionToggle(cat.id)}
+                aria-expanded={isOpen}
+                className={`w-full h-14 px-4 flex items-center gap-3 transition-colors duration-200 ${
+                  isOpen ? visual.bgClass : 'hover:bg-slate-50'
                 }`}
               >
-                <Icon
+                <div
+                  className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 ${visual.iconBgClass}`}
+                >
+                  <Icon
+                    size={16}
+                    strokeWidth={ICON_STROKE}
+                    className={visual.textClass}
+                  />
+                </div>
+
+                <span
+                  className={`body-text-sm font-semibold flex-1 text-right transition-colors duration-200 ${
+                    isOpen ? visual.textClass : 'text-primary'
+                  }`}
+                >
+                  {cat.name}
+                </span>
+
+                {reviewCount > 0 && (
+                  <span
+                    className="min-w-[18px] h-[18px] bg-red-500 text-white text-[10px] font-bold rounded-full flex items-center justify-center px-1 leading-none"
+                    aria-label={`${reviewCount} שורות לבדיקה`}
+                  >
+                    {reviewCount}
+                  </span>
+                )}
+
+                <ChevronDown
                   size={16}
                   strokeWidth={ICON_STROKE}
-                  style={{ color: isSelected ? '#ffffff' : visual.color }}
+                  className={`shrink-0 transition-all duration-200 ${
+                    isOpen ? `rotate-180 ${visual.textClass}` : 'text-slate-400'
+                  }`}
                 />
-              </div>
-              <span className="body-text-sm font-bold mt-2">{cat.name}</span>
-            </button>
+              </button>
+
+              <AnimatePresence>
+                {isOpen && (
+                  <motion.div
+                    initial={{ height: 0, opacity: 0 }}
+                    animate={{ height: 'auto', opacity: 1 }}
+                    exit={{ height: 0, opacity: 0 }}
+                    transition={{ duration: 0.22, ease: [0.4, 0, 0.2, 1] }}
+                    className="overflow-hidden"
+                  >
+                    <div
+                      className={`p-3 flex flex-wrap gap-2 border-t ${visual.borderClass}`}
+                    >
+                      {catSubs.length === 0 ? (
+                        <p className="body-text-sm text-slate-400 py-1">
+                          אין תתי קטגוריות זמינות
+                        </p>
+                      ) : (
+                        catSubs.map((sub, idx) => {
+                          const isSelected = sub.id === selectedSubcategoryId;
+                          return (
+                            <motion.button
+                              key={sub.id}
+                              type="button"
+                              initial={{ opacity: 0, scale: 0.9 }}
+                              animate={{ opacity: 1, scale: 1 }}
+                              transition={{ duration: 0.14, delay: idx * 0.025 }}
+                              onClick={() => onPickSubcategory(sub.id)}
+                              aria-pressed={isSelected}
+                              aria-label={`הוסף שורה עם תת-קטגוריה ${sub.name}`}
+                              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full border body-text-sm font-medium transition-all duration-200 active:scale-95 ${
+                                isSelected
+                                  ? `${visual.pillSelectedBgClass} ${visual.pillSelectedBorderClass} ${visual.textClass}`
+                                  : 'bg-white border-slate-200 text-slate-600 hover:border-slate-300'
+                              }`}
+                            >
+                              <span
+                                className={`w-2 h-2 rounded-full shrink-0 ${visual.dotClass} ${
+                                  isSelected ? 'opacity-100' : 'opacity-50'
+                                }`}
+                              />
+                              {sub.name}
+                            </motion.button>
+                          );
+                        })
+                      )}
+                    </div>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+            </div>
           );
         })}
       </div>
 
-      <div className="border-t border-slate-100 pt-4">
-        <h4 className="label-text text-slate-400 mb-3 uppercase tracking-wider">
-          תתי קטגוריות זמינות:
-        </h4>
-        <div className="flex flex-wrap gap-2 min-h-[40px]">
-          <AnimatePresence mode="wait">
-            {subcategories.length === 0 ? (
-              <motion.p
-                key={`empty-${selectedMainId}`}
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                exit={{ opacity: 0 }}
-                transition={{ duration: 0.2 }}
-                className="body-text-sm text-slate-400"
-              >
-                אין תתי קטגוריות זמינות
-              </motion.p>
-            ) : (
-              /* התיקון: איחוד מערך הכפתורים תחת אלמנט אב יחיד עבור AnimatePresence */
-              <motion.div
-                key={`list-${selectedMainId}`}
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                exit={{ opacity: 0 }}
-                className="flex flex-wrap gap-2 w-full"
-              >
-                {subcategories.map((sub, idx) => (
-                  <motion.button
-                    key={`${selectedMainId}-${sub.id}`}
-                    type="button"
-                    initial={{ opacity: 0, y: 5 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    exit={{ opacity: 0, y: -5 }}
-                    transition={{ duration: 0.2, delay: idx * 0.03 }}
-                    onClick={() => onPickSubcategory(sub.id)}
-                    disabled={disabled}
-                    aria-label={`בחר תת-קטגוריה ${sub.name}`}
-                    className={`px-3 py-2 rounded-xl body-text-sm font-semibold border transition-all duration-200 ${
-                      disabled
-                        ? 'bg-slate-50 text-slate-300 border-slate-100 cursor-not-allowed'
-                        : 'bg-surface hover:bg-accent hover:text-white border-slate-200 text-slate-600 hover:border-transparent active:scale-95 shadow-sm'
-                    }`}
-                  >
-                    {sub.name}
-                  </motion.button>
-                ))}
-              </motion.div>
-            )}
-          </AnimatePresence>
-        </div>
-      </div>
-
-      <div className="mt-8 bg-background/60 p-3 rounded-xl flex items-start gap-2 border border-slate-200/40">
-        <Info
-          size={14}
-          strokeWidth={ICON_STROKE}
-          className="text-accent shrink-0 mt-0.5"
-        />
+      <div className="mt-auto bg-background/60 p-3 rounded-xl flex items-start gap-2 border border-slate-200/40">
+        <Info size={14} strokeWidth={ICON_STROKE} className="text-accent shrink-0 mt-0.5" />
         <p className="text-[11px] text-slate-500 leading-normal">
-          לחיצה על תת-קטגוריה מזינה אותה לשורה הנבחרת ועוברת אוטומטית לשורה הבאה להזנה מהירה.
+          לחיצה על תת-קטגוריה מוסיפה שורה חדשה בטבלה עם הקטגוריה מוזנת מראש
         </p>
       </div>
     </aside>

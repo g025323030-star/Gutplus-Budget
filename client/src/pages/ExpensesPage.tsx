@@ -1,35 +1,23 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { motion } from 'framer-motion';
-import { AlertCircle, Calendar, ChevronDown, TrendingDown } from 'lucide-react';
-import { CategoryFrequency, CategoryType } from '@gutplus/shared';
-import type { Category, TransactionListItem } from '@gutplus/shared';
+import { AlertCircle, TrendingDown } from 'lucide-react';
+import { CategoryFrequency, CategoryType, CurrencyCode } from '@gutplus/shared';
+import type { BudgetItem, Category, BudgetItemListItem, Holiday } from '@gutplus/shared';
 import { ICON_STROKE } from '../constants/ui';
 import { useCurrentUser } from '../hooks/useCurrentUser';
-import { getTransactions, createTransaction } from '../services/transactions.service';
+import { useSuggestedRowsModal } from '../hooks/useSuggestedRowsModal';
+import { getBudgetItems } from '../services/budget-items.service';
 import { getCategories } from '../services/categories.service';
-import TransactionTable from '../components/transactions/TransactionTable';
-import AdvancedModeModal from '../components/transactions/AdvancedModeModal';
-import type { AdvancedModeResult } from '../components/transactions/AdvancedModeModal';
-import CategoryFormModal from '../components/transactions/CategoryFormModal';
+import BudgetItemTable from '../components/budget-items/BudgetItemTable';
+import AdvancedModeModal from '../components/budget-items/AdvancedModeModal';
+import type { AdvancedModeResult } from '../components/budget-items/AdvancedModeModal';
+import CategoryFormModal from '../components/budget-items/CategoryFormModal';
 import CategoryHelperPanel from '../components/expenses/CategoryHelperPanel';
-import type { DraftRow } from '../components/transactions/types';
-import { snapshotOf } from '../components/transactions/types';
+import HolidayExpensesSection from '../components/expenses/HolidayExpensesSection';
+import type { DraftRow } from '../components/budget-items/types';
+import { snapshotOf } from '../components/budget-items/types';
+import { groupInstallmentRows } from '../components/budget-items/installments';
 import { SuggestedRowsModal } from '../components/expenses/SuggestedRowsModal';
-
-const HEBREW_MONTHS = [
-  'ינואר',
-  'פברואר',
-  'מרץ',
-  'אפריל',
-  'מאי',
-  'יוני',
-  'יולי',
-  'אוגוסט',
-  'ספטמבר',
-  'אוקטובר',
-  'נובמבר',
-  'דצמבר',
-];
 
 const PAGE_VARIANTS = {
   hidden: { opacity: 0 },
@@ -56,60 +44,97 @@ const newLocalId = (): string =>
 const normDesc = (s: string): string =>
   s.trim().replace(/\s+/g, ' ').toLowerCase();
 
-const isProjectionItem = (
-  item: TransactionListItem,
-): item is Extract<TransactionListItem, { isProjection: true }> =>
+const isProjectionItem = (item: BudgetItemListItem): boolean =>
   (item as { isProjection?: boolean }).isProjection === true;
 
-const toDraftRow = (item: TransactionListItem): DraftRow | null => {
+const toDraftRow = (item: BudgetItemListItem): DraftRow | null => {
   if (isProjectionItem(item)) return null;
   const amountStr =
     typeof item.amount === 'string' ? item.amount : String(item.amount);
-  const dateOnly = item.date ? item.date.slice(0, 10) : '';
   const installmentsTotal = item.installmentsTotal ?? null;
+  const endDateOnly = item.endDate ? item.endDate.slice(0, 10) : null;
   const base: DraftRow = {
     localId: newLocalId(),
     serverId: item.id,
     installmentsTotal,
+    installmentGroupId: (item as { installmentGroupId?: string | null }).installmentGroupId ?? null,
+    installmentIndex: (item as { installmentIndex?: number | null }).installmentIndex ?? null,
+    isRecurring: false,
+    recurringFrequency: null,
+    recurringEndDate: null,
     description: item.description,
     categoryId: item.categoryId ?? null,
     amount: amountStr,
-    date: dateOnly,
     status: 'idle',
     errorMessage: null,
     lastSavedSnapshot: null,
-    mode: installmentsTotal !== null ? 'installments' : 'none',
-    endDate: null,
-    isBiMonthly: false,
+    mode:
+      installmentsTotal !== null
+        ? 'installments'
+        : endDateOnly !== null
+          ? 'lastMonth'
+          : 'none',
+    endDate: endDateOnly,
+    isBiMonthly: (item as { isBiMonthly?: boolean }).isBiMonthly ?? false,
+    needsReview: item.needsReview ?? false,
+    targetAmount: item.targetAmount ?? null,
+    currency: item.currency ?? CurrencyCode.ILS,
+    assignedMonth: (item as { assignedMonth?: number | null }).assignedMonth ?? null,
+    isOneTime: (item as { isOneTime?: boolean }).isOneTime ?? false,
+    baseMonth: (item as { baseMonth?: number | null }).baseMonth ?? null,
   };
   base.lastSavedSnapshot = snapshotOf(base);
   return base;
 };
 
+// ---- RubricHeader helper ----
+interface RubricHeaderProps {
+  title: string;
+  subtitle?: string;
+  icon?: React.ReactNode;
+}
+function RubricHeader({ title, subtitle, icon }: RubricHeaderProps) {
+  return (
+    <div className="flex items-start gap-2 px-1 mb-1">
+      {icon && <span className="mt-0.5 text-accent">{icon}</span>}
+      <div>
+        <h2 className="heading-3">{title}</h2>
+        {subtitle && <p className="body-text-sm text-slate-500 mt-0.5">{subtitle}</p>}
+      </div>
+    </div>
+  );
+}
+
 export default function ExpensesPage() {
   const now = new Date();
-  const [selectedMonth, setSelectedMonth] = useState<number>(
-    now.getMonth() + 1,
-  );
-  const [selectedYear, setSelectedYear] = useState<number>(now.getFullYear());
+  // The page no longer exposes a month/year picker — each row is a recurring
+  // monthly average. We anchor month-dependent logic to the current month.
+  const selectedMonth = now.getMonth() + 1;
+  const selectedYear = now.getFullYear();
   const [activeTab, setActiveTab] = useState<'monthly' | 'yearly'>('monthly');
   const [selectedMainCategoryId, setSelectedMainCategoryId] = useState<string | null>(null);
-  const [rows, setRows] = useState<DraftRow[]>([]);
+
+  // Monthly mode: unified main table (every row shown every month, both
+  // currently-due and off-parity bi-monthly items mixed into the one list)
+  const [mainRows, setMainRows] = useState<DraftRow[]>([]);
+  // Yearly mode: yearly general rows
+  const [yearlyRows, setYearlyRows] = useState<DraftRow[]>([]);
+  // Running total per holiday, summed from the full unfiltered BudgetItem list
+  const [holidayTotals, setHolidayTotals] = useState<Partial<Record<Holiday, number>>>({});
+
   const [categories, setCategories] = useState<Category[]>([]);
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
   const [reloadKey, setReloadKey] = useState(0);
 
   const [focusedRowId, setFocusedRowId] = useState<string | null>(null);
+  const [selectedSubcategoryId, setSelectedSubcategoryId] = useState<string | null>(null);
   const [advancedModeForRowId, setAdvancedModeForRowId] = useState<
     string | null
   >(null);
   const [addCategoryForRowId, setAddCategoryForRowId] = useState<
     string | null
   >(null);
-  const [isSuggestionModalOpen, setIsSuggestionModalOpen] = useState(false);
-  const [suggestedRows, setSuggestedRows] = useState<DraftRow[]>([]);
-  const [isSavingTemplates, setIsSavingTemplates] = useState(false);
 
   const {
     householdId,
@@ -120,14 +145,44 @@ export default function ExpensesPage() {
 
   const isFirstUse = !expenseTemplatesInitialized;
 
+  const suggestions = useSuggestedRowsModal({
+    householdId,
+    validRowFilter: (row) => Boolean(row.amount) && Number(row.amount) > 0,
+    buildPayloadExtras: (row) => ({ baseMonth: row.baseMonth ?? undefined }),
+    onSaved: () => setReloadKey((k) => k + 1),
+  });
+
   const expenseCategories = useMemo(
     () => categories.filter((c) => c.type === CategoryType.EXPENSE),
     [categories],
   );
 
-  const mainExpenseCategories = useMemo(
-    () => expenseCategories.filter((c) => c.parentCategoryId === null),
-    [expenseCategories],
+  const mainExpenseCategories = useMemo(() => {
+    // Only these main categories are shown in the sidebar, in this exact order.
+    const order = [
+      'הוצאות ביתיות',
+      'הוצאות שוטפות',
+      'מזון',
+      'תחבורה ורכב',
+      'בריאות',
+      'תקשורת ואינטרנט',
+      'לימודים',
+      'מנויים',
+      'עמלות',
+      'מעשרות וצדקה',
+      'ביטוחים',
+      'החזרי חובות',
+    ];
+    const rank = new Map(order.map((name, i) => [name, i] as const));
+    return expenseCategories
+      .filter((c) => c.parentCategoryId === null && rank.has(c.name))
+      .sort((a, b) => (rank.get(a.name) ?? 0) - (rank.get(b.name) ?? 0));
+  }, [expenseCategories]);
+
+  // Combined rows (all tables) — used for focused-row lookup, needsReview counts, etc.
+  const allRows = useMemo(
+    () => [...mainRows, ...yearlyRows],
+    [mainRows, yearlyRows],
   );
 
   useEffect(() => {
@@ -137,8 +192,10 @@ export default function ExpensesPage() {
     const load = async () => {
       setIsLoading(true);
       setError(null);
+      // For monthly: fetch by month+year. For yearly: fetch by year only.
+      const fetchMonth = activeTab === 'monthly' ? selectedMonth : undefined;
       const [txResult, catsResult] = await Promise.allSettled([
-        getTransactions(selectedMonth, selectedYear),
+        getBudgetItems(fetchMonth, selectedYear),
         getCategories(),
       ]);
       if (cancelled) return;
@@ -157,19 +214,58 @@ export default function ExpensesPage() {
             .filter((c) => c.type === CategoryType.EXPENSE)
             .map((c) => c.id),
         );
+        const targetFrequency =
+          activeTab === 'yearly' ? CategoryFrequency.YEARLY : CategoryFrequency.MONTHLY;
+
+        // A capped item ("last billing month") drops out once its endDate is
+        // before the first day of the viewed month — mirrors the server's
+        // isItemIncludedInMonth so the editor matches the budget totals.
+        const firstOfViewedMonth = new Date(selectedYear, selectedMonth - 1, 1);
+        const includedByEndDate = (item: BudgetItemListItem): boolean =>
+          !item.endDate || new Date(item.endDate) >= firstOfViewedMonth;
+
+        // Holiday items carry no categoryId/year — sum the full raw list (not
+        // draftRows, which filters them out) by holiday, with no year filter.
+        const nextHolidayTotals: Partial<Record<Holiday, number>> = {};
+        for (const item of txResult.value) {
+          if (item.holiday) {
+            nextHolidayTotals[item.holiday] =
+              (nextHolidayTotals[item.holiday] ?? 0) + parseFloat(item.amount);
+          }
+        }
+        setHolidayTotals(nextHolidayTotals);
+
         const draftRows: DraftRow[] = txResult.value
           .filter(
             (item) =>
               !isProjectionItem(item) &&
               item.categoryId !== null &&
-              expenseCatIds.has(item.categoryId),
+              expenseCatIds.has(item.categoryId) &&
+              item.frequency === targetFrequency &&
+              includedByEndDate(item),
           )
           .map((item) => toDraftRow(item))
           .filter((r): r is DraftRow => r !== null);
-        setRows(draftRows);
+
+        if (activeTab === 'monthly') {
+          // Collapse installment siblings into single representative rows.
+          // No parity filter — every row shows every month, both
+          // currently-due and off-parity bi-monthly items mixed into the
+          // one list (BudgetItemRow already halves the displayed amount
+          // for bi-monthly rows).
+          const grouped = groupInstallmentRows(draftRows, selectedMonth, selectedYear);
+          setMainRows(grouped);
+          setYearlyRows([]);
+        } else {
+          // YEARLY
+          setYearlyRows(draftRows);
+          setMainRows([]);
+        }
       } else {
         console.error('Error loading transactions:', txResult.reason);
-        setRows([]);
+        setMainRows([]);
+        setYearlyRows([]);
+        setHolidayTotals({});
         setError('שגיאה בטעינת ההוצאות. נסה לרענן את הדף.');
       }
 
@@ -181,7 +277,7 @@ export default function ExpensesPage() {
       cancelled = true;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedMonth, selectedYear, householdId, reloadKey]);
+  }, [activeTab, selectedMonth, selectedYear, householdId, reloadKey]);
 
   useEffect(() => {
     if (mainExpenseCategories && mainExpenseCategories.length > 0 && !selectedMainCategoryId) {
@@ -189,9 +285,11 @@ export default function ExpensesPage() {
     }
   }, [mainExpenseCategories, selectedMainCategoryId]);
 
-  const handleRowsChange = useCallback((next: DraftRow[]) => {
-    setRows(next);
-  }, []);
+  // Clear the selected subcategory when the period/tab changes, so the fixed-table
+  // add-row pre-fill and the helper-panel highlight don't carry a stale selection.
+  useEffect(() => {
+    setSelectedSubcategoryId(null);
+  }, [activeTab, selectedMonth, selectedYear]);
 
   const handleRowFocus = useCallback((localId: string) => {
     setFocusedRowId(localId);
@@ -201,64 +299,57 @@ export default function ExpensesPage() {
     setReloadKey((k) => k + 1);
   }, []);
 
+  const makeEmptyRow = useCallback(
+    (categoryId: string | null): DraftRow => ({
+      localId: newLocalId(),
+      serverId: null,
+      installmentsTotal: null,
+      isRecurring: false,
+      recurringFrequency: null,
+      recurringEndDate: null,
+      description: '',
+      categoryId,
+      amount: '',
+      status: 'idle',
+      errorMessage: null,
+      lastSavedSnapshot: null,
+      mode: 'none',
+      endDate: null,
+      isBiMonthly: false,
+      needsReview: false,
+      targetAmount: null,
+      currency: CurrencyCode.ILS,
+      assignedMonth: null,
+      isOneTime: false,
+      baseMonth: null,
+    }),
+    [],
+  );
+
   const handlePickSubcategory = useCallback(
     (categoryId: string) => {
-      if (!focusedRowId) return;
-      setRows((prev) => {
-        const idx = prev.findIndex((r) => r.localId === focusedRowId);
-        if (idx === -1) return prev;
-        const updated = [...prev];
-        const target = updated[idx];
-        updated[idx] = {
-          ...target,
-          categoryId,
-          status:
-            target.status === 'saving'
-              ? 'saving'
-              : target.status === 'error'
-                ? 'error'
-                : 'dirty',
-        };
-        return updated;
-      });
-      setFocusedRowId((current) => {
-        const idx = rows.findIndex((r) => r.localId === current);
-        if (idx === -1) return current;
-        const nextRow = rows[idx + 1];
-        return nextRow ? nextRow.localId : current;
-      });
+      setSelectedSubcategoryId(categoryId);
+      const newRow = makeEmptyRow(categoryId);
+      // Add the new row at the TOP of the table so it's immediately visible.
+      setMainRows((prev) => [newRow, ...prev]);
+      setFocusedRowId(newRow.localId);
     },
-    [focusedRowId, rows],
+    [makeEmptyRow],
   );
 
   const buildTemplateRows = useCallback(
     (subcategories: Category[]): DraftRow[] => {
-      const used = new Set(rows.map((r) => normDesc(r.description)));
-      const date = `${selectedYear}-${String(selectedMonth).padStart(2, '0')}-01`;
+      const used = new Set(allRows.map((r) => normDesc(r.description)));
       const newRows: DraftRow[] = [];
       for (const sub of subcategories) {
         const key = normDesc(sub.name);
         if (used.has(key)) continue;
         used.add(key);
-        newRows.push({
-          localId: newLocalId(),
-          serverId: null,
-          installmentsTotal: null,
-          description: sub.name.trim(),
-          categoryId: sub.id,
-          amount: '',
-          date,
-          status: 'idle',
-          errorMessage: null,
-          lastSavedSnapshot: null,
-          mode: 'none',
-          endDate: null,
-          isBiMonthly: false,
-        });
+        newRows.push({ ...makeEmptyRow(sub.id), description: sub.name.trim() });
       }
       return newRows;
     },
-    [rows, selectedMonth, selectedYear],
+    [allRows, makeEmptyRow],
   );
 
   const globalExpenseSubcategories = useMemo(
@@ -275,20 +366,25 @@ export default function ExpensesPage() {
       return;
     }
 
+    const mainCategoryId = selectedMainCategoryId;
+
     const subs = globalExpenseSubcategories.filter(
-      (c) => c.parentCategoryId === selectedMainCategoryId,
+      (c) => c.parentCategoryId === mainCategoryId,
     );
 
     const newRows = buildTemplateRows(subs);
-    
-    if (newRows.length === 0) {
-      alert("כל תתי-הקטגוריות עבור הקטגוריה שנבחרה כבר קיימות בטבלה לחודש זה.");
+
+    const categoryIds = new Set<string>([mainCategoryId, ...subs.map((s) => s.id)]);
+    const flaggedRows = allRows.filter((r) => r.needsReview && r.categoryId !== null && categoryIds.has(r.categoryId));
+    const combined = [...flaggedRows, ...newRows];
+
+    if (combined.length === 0) {
+      alert('אין שורות חדשות מוצעות ואין שורות מסומנות לעדכון בקטגוריה זו');
       return;
     }
 
-    setSuggestedRows(newRows);
-    setIsSuggestionModalOpen(true);
-  }, [selectedMainCategoryId, globalExpenseSubcategories, buildTemplateRows]);
+    suggestions.open(combined);
+  }, [selectedMainCategoryId, globalExpenseSubcategories, buildTemplateRows, allRows, suggestions]);
 
   const handleAdvancedModeRequest = useCallback((localId: string) => {
     setAdvancedModeForRowId(localId);
@@ -297,7 +393,7 @@ export default function ExpensesPage() {
   const handleAdvancedModeConfirm = useCallback(
     (result: AdvancedModeResult) => {
       if (!advancedModeForRowId) return;
-      setRows((prev) =>
+      const applyAdvanced = (prev: DraftRow[]): DraftRow[] =>
         prev.map((r) => {
           if (r.localId !== advancedModeForRowId) return r;
           const status =
@@ -307,8 +403,34 @@ export default function ExpensesPage() {
               ...r,
               mode: 'installments',
               installmentsTotal: result.installmentsTotal,
-              endDate: null,
+              baseMonth: null,
               isBiMonthly: false,
+              endDate: null,
+              status,
+            };
+          }
+          if (result.mode === 'biMonthly') {
+            return {
+              ...r,
+              mode: 'none',
+              installmentsTotal: null,
+              baseMonth: result.parity === 'even' ? 2 : 1,
+              isBiMonthly: true,
+              endDate: null,
+              status,
+            };
+          }
+          if (result.mode === 'lastMonth') {
+            // A normal monthly expense capped at a last billing month. It stays
+            // a single projected row (mode stays effectively "none" for the
+            // create path) — only endDate limits how long it is billed.
+            return {
+              ...r,
+              mode: 'lastMonth',
+              installmentsTotal: null,
+              baseMonth: null,
+              isBiMonthly: false,
+              endDate: result.endDate,
               status,
             };
           }
@@ -317,8 +439,9 @@ export default function ExpensesPage() {
               ...r,
               mode: 'recurring',
               installmentsTotal: null,
+              baseMonth: null,
+              isBiMonthly: false,
               endDate: result.endDate,
-              isBiMonthly: result.isBiMonthly,
               status,
             };
           }
@@ -326,12 +449,14 @@ export default function ExpensesPage() {
             ...r,
             mode: 'none',
             installmentsTotal: null,
-            endDate: null,
+            baseMonth: null,
             isBiMonthly: false,
+            endDate: null,
             status,
           };
-        }),
-      );
+        });
+      setMainRows(applyAdvanced);
+      setYearlyRows(applyAdvanced);
       setAdvancedModeForRowId(null);
     },
     [advancedModeForRowId],
@@ -345,7 +470,7 @@ export default function ExpensesPage() {
     (newCategory: Category) => {
       setCategories((prev) => [...prev, newCategory]);
       if (addCategoryForRowId) {
-        setRows((prev) =>
+        const applyCategory = (prev: DraftRow[]): DraftRow[] =>
           prev.map((r) =>
             r.localId === addCategoryForRowId
               ? {
@@ -357,93 +482,45 @@ export default function ExpensesPage() {
                       : r.status,
                 }
               : r,
-          ),
-        );
+          );
+        setMainRows(applyCategory);
+        setYearlyRows(applyCategory);
       }
       setAddCategoryForRowId(null);
     },
     [addCategoryForRowId],
   );
 
-  // פונקציית השמירה האסינכרונית המתוקנת ללא שגיאות טיפוסים
-  const handleSaveSuggestedRows = useCallback(async (rowsFromModal: DraftRow[]) => {
-    const validRows = rowsFromModal.filter(row => row.amount && Number(row.amount) > 0);
-    
-    if (validRows.length === 0) {
-      setIsSuggestionModalOpen(false);
-      setSuggestedRows([]);
-      return;
-    }
-
-    if (!householdId) return;
-
-    setIsSavingTemplates(true);
-    const savedRowsToAppend: DraftRow[] = [];
-
-    try {
-      for (const row of validRows) {
-        const payload = {
-          amount: String(row.amount),
-          date: row.date,
-          description: row.description.trim(),
-          frequency: CategoryFrequency.MONTHLY,
-          householdId: householdId,
-          categoryId: row.categoryId ?? undefined,
-          installmentsTotal: row.installmentsTotal ?? undefined,
-        };
-
-        const result = await createTransaction(payload);
-
-        if (result && result.kind === 'transactions' && result.data?.[0]) {
-          const serverData = result.data[0];
-          
-          const savedRow: DraftRow = {
-            ...row,
-            serverId: serverData.id,
-            status: 'synced',
-            lastSavedSnapshot: null,
-          };
-          savedRow.lastSavedSnapshot = snapshotOf(savedRow);
-          
-          savedRowsToAppend.push(savedRow);
-        } else {
-          savedRowsToAppend.push({
-            ...row,
-            status: 'error',
-            errorMessage: 'השמירה בשרת נכשלה',
-          });
-        }
-      }
-
-      setRows((prev) => [...prev, ...savedRowsToAppend]);
-      setIsSuggestionModalOpen(false);
-      setSuggestedRows([]);
-    } catch (err) {
-      console.error('Failed to save template rows:', err);
-      alert('התרחשה שגיאה בעת שמירת הנתונים.');
-    } finally {
-      setIsSavingTemplates(false);
-    }
-  }, [householdId]);
-
-  const handleCloseSuggestionModal = useCallback(() => {
-    setIsSuggestionModalOpen(false);
-    setSuggestedRows([]);
+  const handleHolidayTransactionsCreated = useCallback((_txs: BudgetItem[]) => {
+    // Holiday transactions are managed by HolidayExpensesSection internally.
+    // Reload yearly rows to reflect newly saved items.
+    setReloadKey((k) => k + 1);
   }, []);
 
   const advancedModeRow = useMemo(
-    () => rows.find((r) => r.localId === advancedModeForRowId) ?? null,
-    [advancedModeForRowId, rows],
+    () => allRows.find((r) => r.localId === advancedModeForRowId) ?? null,
+    [advancedModeForRowId, allRows],
   );
 
+  // Compute per-category needsReview counts (client-side only, no server endpoint)
+  const needsReviewCounts = useMemo(() => {
+    const counts: Record<string, number> = {};
+    for (const row of allRows) {
+      if (row.needsReview && row.categoryId) {
+        counts[row.categoryId] = (counts[row.categoryId] ?? 0) + 1;
+      }
+    }
+    return counts;
+  }, [allRows]);
+
   const focusedRow = useMemo(
-    () => rows.find((r) => r.localId === focusedRowId) ?? null,
-    [focusedRowId, rows],
+    () => allRows.find((r) => r.localId === focusedRowId) ?? null,
+    [focusedRowId, allRows],
   );
 
   const focusedRowIndex = useMemo(
-    () => (focusedRowId ? rows.findIndex((r) => r.localId === focusedRowId) : -1),
-    [focusedRowId, rows],
+    () => (focusedRowId ? allRows.findIndex((r) => r.localId === focusedRowId) : -1),
+    [focusedRowId, allRows],
   );
 
   if (userLoading) {
@@ -472,11 +549,6 @@ export default function ExpensesPage() {
     );
   }
 
-  const currentYear = new Date().getFullYear();
-  const years: number[] = [];
-  for (let y = currentYear + 1; y >= currentYear - 5; y -= 1) {
-    years.push(y);
-  }
 
   return (
     <motion.div
@@ -505,14 +577,12 @@ export default function ExpensesPage() {
         <div className="flex items-center gap-2 bg-surface p-1 rounded-xl shadow-sm border border-slate-100">
           <button
             type="button"
-            disabled
             onClick={() => setActiveTab('yearly')}
             className={`px-4 py-1.5 rounded-lg label-text transition-all duration-200 ${
               activeTab === 'yearly'
                 ? 'bg-accent text-white'
-                : 'text-slate-400 cursor-not-allowed'
+                : 'text-slate-500 hover:text-primary'
             }`}
-            title="בקרוב"
           >
             שנתי
           </button>
@@ -530,55 +600,6 @@ export default function ExpensesPage() {
         </div>
       </motion.header>
 
-      <motion.section
-        variants={ITEM_VARIANTS}
-        className="flex items-center gap-3"
-      >
-        <div className="relative">
-          <select
-            value={selectedYear}
-            onChange={(e) => setSelectedYear(Number(e.target.value))}
-            aria-label="בחירת שנה"
-            className="appearance-none bg-surface border border-slate-200 px-8 py-2 rounded-xl label-text text-primary focus:outline-none focus:border-accent shadow-sm cursor-pointer"
-          >
-            {years.map((y) => (
-              <option key={y} value={y}>
-                {y}
-              </option>
-            ))}
-          </select>
-          <ChevronDown
-            size={14}
-            strokeWidth={ICON_STROKE}
-            className="absolute left-3 top-3.5 text-slate-400 pointer-events-none"
-          />
-        </div>
-
-        <div className="relative">
-          <select
-            value={selectedMonth}
-            onChange={(e) => setSelectedMonth(Number(e.target.value))}
-            aria-label="בחירת חודש"
-            className="appearance-none bg-surface border border-slate-200 px-8 py-2 rounded-xl label-text text-primary focus:outline-none focus:border-accent shadow-sm cursor-pointer"
-          >
-            {HEBREW_MONTHS.map((label, idx) => (
-              <option key={label} value={idx + 1}>
-                {label}
-              </option>
-            ))}
-          </select>
-          <ChevronDown
-            size={14}
-            strokeWidth={ICON_STROKE}
-            className="absolute left-3 top-3.5 text-slate-400 pointer-events-none"
-          />
-        </div>
-
-        <div className="w-10 h-10 bg-surface border border-slate-200 rounded-xl flex items-center justify-center text-slate-400 shadow-sm">
-          <Calendar size={18} strokeWidth={ICON_STROKE} />
-        </div>
-      </motion.section>
-
       {error && (
         <motion.div
           variants={ITEM_VARIANTS}
@@ -593,51 +614,114 @@ export default function ExpensesPage() {
         </motion.div>
       )}
 
-      <motion.div
-        variants={ITEM_VARIANTS}
-        className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start"
-      >
-        <div className="lg:col-span-8">
-          <TransactionTable
-            rows={rows}
-            categories={expenseCategories}
-            householdId={householdId}
-            frequency={CategoryFrequency.MONTHLY}
-            monthConstraint={selectedMonth}
-            yearConstraint={selectedYear}
-            onChange={handleRowsChange}
-            isLoading={isLoading}
-            focusedRowId={focusedRowId}
-            onRowFocus={handleRowFocus}
-            onAddCategoryRequest={handleAddCategoryRequest}
-            onAdvancedModeRequest={handleAdvancedModeRequest}
-            onAfterAdvancedModeSave={handleAfterAdvancedModeSave}
-            onFillTemplates={handleFillSelectedCategoryTemplates}
-            showTemplatesButton={true}
-          />
-        </div>
+      {/* ======== MONTHLY mode: unified table + helper panel ======== */}
+      {activeTab === 'monthly' && (
+        <motion.div
+          variants={ITEM_VARIANTS}
+          className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start"
+        >
+          <div className="lg:col-span-8 space-y-6">
+            {/* Unified main table: fixed + installments + bi-monthly (every row, every month) */}
+            <section>
+              <RubricHeader
+                title="הוצאות החודש"
+                subtitle="הוצאות קבועות, תשלומים והוצאות דו-חודשיות"
+              />
+              <BudgetItemTable
+                rows={mainRows}
+                categories={expenseCategories}
+                householdId={householdId}
+                frequency={CategoryFrequency.MONTHLY}
+                monthConstraint={selectedMonth}
+                yearConstraint={selectedYear}
+                onChange={setMainRows}
+                isLoading={isLoading}
+                focusedRowId={focusedRowId}
+                onRowFocus={handleRowFocus}
+                onAddCategoryRequest={handleAddCategoryRequest}
+                onAdvancedModeRequest={handleAdvancedModeRequest}
+                advancedModeRowId={advancedModeForRowId}
+                onAfterAdvancedModeSave={handleAfterAdvancedModeSave}
+                onFillTemplates={handleFillSelectedCategoryTemplates}
+                showTemplatesButton={true}
+                title="הוצאות החודש"
+                descriptionPlaceholder="לדוגמה: שכר דירה"
+                categoryMode="label"
+                defaultCategoryId={selectedSubcategoryId ?? selectedMainCategoryId}
+                addRowDisabled={!selectedSubcategoryId && !selectedMainCategoryId}
+                sortable
+              />
+            </section>
+          </div>
 
-        <div className="lg:col-span-4">
-          <CategoryHelperPanel
-            mainCategories={mainExpenseCategories}
-            allCategories={expenseCategories}
-            focusedRowId={focusedRowId}
-            focusedRowDescription={focusedRow?.description ?? ''}
-            focusedRowIndex={focusedRowIndex === -1 ? null : focusedRowIndex}
-            onPickSubcategory={handlePickSubcategory}
-            isFirstUse={isFirstUse}
-            selectedMainId={selectedMainCategoryId}
-            onSelectedMainIdChange={setSelectedMainCategoryId}
-          />
-        </div>
-      </motion.div>
+          <div className="lg:col-span-4">
+            <CategoryHelperPanel
+              mainCategories={mainExpenseCategories}
+              allCategories={expenseCategories}
+              focusedRowId={focusedRowId}
+              focusedRowDescription={focusedRow?.description ?? ''}
+              focusedRowIndex={focusedRowIndex === -1 ? null : focusedRowIndex}
+              onPickSubcategory={handlePickSubcategory}
+              isFirstUse={isFirstUse}
+              selectedMainId={selectedMainCategoryId}
+              onSelectedMainIdChange={setSelectedMainCategoryId}
+              needsReviewCounts={needsReviewCounts}
+              selectedSubcategoryId={selectedSubcategoryId}
+            />
+          </div>
+        </motion.div>
+      )}
 
-      <SuggestedRowsModal 
-        isOpen={isSuggestionModalOpen}
-        rows={suggestedRows}
-        isLoading={isSavingTemplates}
-        onClose={handleCloseSuggestionModal}
-        onConfirm={handleSaveSuggestedRows}
+      {/* ======== YEARLY mode: 2 rubrics ======== */}
+      {activeTab === 'yearly' && (
+        <motion.div
+          variants={ITEM_VARIANTS}
+          className="space-y-8"
+        >
+          {/* Rubric 1: הוצאות שנתיות כלליות */}
+          <section>
+            <RubricHeader
+              title="הוצאות שנתיות כלליות"
+              subtitle="הוצאות שנתיות חוזרות — ביטוח, ארנונה, מנויים שנתיים"
+            />
+            <BudgetItemTable
+              rows={yearlyRows}
+              categories={expenseCategories}
+              householdId={householdId}
+              frequency={CategoryFrequency.YEARLY}
+              yearConstraint={selectedYear}
+              isYearly={true}
+              onChange={setYearlyRows}
+              isLoading={isLoading}
+              onAddCategoryRequest={handleAddCategoryRequest}
+              onAdvancedModeRequest={handleAdvancedModeRequest}
+              advancedModeRowId={advancedModeForRowId}
+              onAfterAdvancedModeSave={handleAfterAdvancedModeSave}
+              title="הוצאות שנתיות"
+              descriptionPlaceholder="לדוגמה: ביטוח רכב"
+              categoryMode="label"
+              sortable
+            />
+          </section>
+
+          {/* Rubric 2: הוצאות חגים ואירועים */}
+          <section>
+            <HolidayExpensesSection
+              year={selectedYear}
+              householdId={householdId}
+              onTransactionsCreated={handleHolidayTransactionsCreated}
+              totalsByHoliday={holidayTotals}
+            />
+          </section>
+        </motion.div>
+      )}
+
+      <SuggestedRowsModal
+        isOpen={suggestions.isOpen}
+        rows={suggestions.rows}
+        isLoading={suggestions.isSaving}
+        onClose={suggestions.close}
+        onConfirm={suggestions.save}
       />
 
       <AdvancedModeModal
@@ -645,10 +729,11 @@ export default function ExpensesPage() {
         initialMode={advancedModeRow?.mode ?? 'none'}
         initialInstallmentsTotal={advancedModeRow?.installmentsTotal ?? null}
         initialEndDate={advancedModeRow?.endDate ?? null}
-        initialIsBiMonthly={advancedModeRow?.isBiMonthly ?? false}
+        initialBaseMonth={advancedModeRow?.baseMonth ?? null}
         totalAmount={advancedModeRow?.amount ?? ''}
         onClose={() => setAdvancedModeForRowId(null)}
         onConfirm={handleAdvancedModeConfirm}
+        showInstallments={activeTab === 'yearly'}
       />
 
       <CategoryFormModal

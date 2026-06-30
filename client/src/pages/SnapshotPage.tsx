@@ -1,17 +1,100 @@
 import { useEffect, useMemo, useState } from 'react';
-import { AlertCircle, LayoutDashboard } from 'lucide-react';
-import { CategoryFrequency, CategoryType } from '@gutplus/shared';
-import type { BudgetPlan, Category, Transaction } from '@gutplus/shared';
+import {
+  AlertCircle,
+  LayoutDashboard,
+  Scale,
+  TrendingDown,
+  TrendingUp,
+} from 'lucide-react';
+import type { BudgetItem, Category, MonthlySummary } from '@gutplus/shared';
 import { ICON_STROKE } from '../constants/ui';
-import { getTransactions } from '../services/transactions.service';
+import { getBudgetItems } from '../services/budget-items.service';
 import { getCategories } from '../services/categories.service';
-import { getBudgetPlans } from '../services/budget-plans.service';
+import { getSummary, getAnnualSummary } from '../services/summary.service';
+import type { AnnualSummary } from '../services/summary.service';
 import PeriodToggle from '../components/snapshot/PeriodToggle';
 import type { PeriodMode } from '../components/snapshot/PeriodToggle';
-import SummaryCards from '../components/snapshot/SummaryCards';
+import SnapshotMonthlyOverview from '../components/snapshot/SnapshotMonthlyOverview';
 import CategoryPieChart from '../components/snapshot/CategoryPieChart';
-import SnapshotCalendar from '../components/snapshot/SnapshotCalendar';
 import TransactionsList from '../components/snapshot/TransactionsList';
+
+const currencyFormatter = new Intl.NumberFormat('he-IL', {
+  style: 'currency',
+  currency: 'ILS',
+  maximumFractionDigits: 0,
+});
+const formatILS = (value: number): string => currencyFormatter.format(value);
+
+interface AnnualKpiCardProps {
+  label: string;
+  value: number;
+  icon: React.ReactNode;
+  valueClassName: string;
+}
+
+// A single macro card — matches BudgetKpiCards.tsx's KpiCard visual pattern
+// (label + icon header, one bold figure), without importing from BudgetPlanner/.
+function AnnualKpiCard({ label, value, icon, valueClassName }: AnnualKpiCardProps) {
+  return (
+    <div className="bg-surface rounded-2xl shadow-sm border border-slate-100 p-6 transition-all duration-300 hover:shadow-md">
+      <div className="flex items-center justify-between mb-3">
+        <span className="label-text">{label}</span>
+        {icon}
+      </div>
+      <p className={`heading-3 ${valueClassName}`}>{formatILS(value)}</p>
+    </div>
+  );
+}
+
+interface AnnualSummaryCardsProps {
+  summary: AnnualSummary;
+}
+
+// Strictly 3 macro cards — Total Income / Annual Expenses / Net Balance —
+// sourced from the existing AnnualSummary shape. Debt repayments are folded
+// into "Net Balance" (balanceAfterDebts already nets them out) rather than
+// shown as a separate 4th card; they remain visible in the monthly overview.
+function AnnualSummaryCards({ summary }: AnnualSummaryCardsProps) {
+  const balanceClass =
+    summary.balanceAfterDebts >= 0 ? 'text-green-500' : 'text-red-500';
+
+  return (
+    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+      <AnnualKpiCard
+        label="סך הכנסות שנתיות"
+        value={summary.totalIncome}
+        icon={
+          <TrendingUp
+            className="text-green-500"
+            size={22}
+            strokeWidth={ICON_STROKE}
+          />
+        }
+        valueClassName="text-green-500"
+      />
+      <AnnualKpiCard
+        label="הוצאות שנתיות"
+        value={summary.totalExpenses}
+        icon={
+          <TrendingDown
+            className="text-red-500"
+            size={22}
+            strokeWidth={ICON_STROKE}
+          />
+        }
+        valueClassName="text-red-500"
+      />
+      <AnnualKpiCard
+        label="יתרה שנתית נטו"
+        value={summary.balanceAfterDebts}
+        icon={
+          <Scale className="text-accent" size={22} strokeWidth={ICON_STROKE} />
+        }
+        valueClassName={balanceClass}
+      />
+    </div>
+  );
+}
 
 function LoadingSkeleton() {
   return (
@@ -50,28 +133,40 @@ function ErrorBlock({ message }: ErrorBlockProps) {
   );
 }
 
+// Each budget item is a recurring/averaged forecast entry rather than a dated
+// transaction. Per the product model, every item is shown except:
+//   • installment payments — anchored to a single month via assignedMonth;
+//   • endDate-bounded items — dropped once their expiration month has passed.
 const filterToPeriod = (
-  transactions: Transaction[],
+  transactions: BudgetItem[],
   mode: PeriodMode,
   month: number,
   year: number,
-): Transaction[] =>
+): BudgetItem[] =>
   transactions.filter((tx) => {
-    const txDate = new Date(tx.date);
-    if (txDate.getFullYear() !== year) return false;
-    if (mode === 'monthly' && txDate.getMonth() + 1 !== month) return false;
+    if (tx.endDate) {
+      const end = new Date(tx.endDate);
+      const periodStart =
+        mode === 'monthly' ? new Date(year, month - 1, 1) : new Date(year, 0, 1);
+      if (end < periodStart) return false;
+    }
+    if (tx.installmentGroupId != null) {
+      return mode === 'yearly' || tx.assignedMonth === month;
+    }
     return true;
   });
 
 export default function SnapshotPage() {
   const now = new Date();
   const [mode, setMode] = useState<PeriodMode>('monthly');
-  const [selectedMonth, setSelectedMonth] = useState<number>(now.getMonth() + 1);
-  const [selectedYear, setSelectedYear] = useState<number>(now.getFullYear());
+  // No month/year picker — the page reflects the current period.
+  const selectedMonth = now.getMonth() + 1;
+  const selectedYear = now.getFullYear();
 
-  const [transactions, setTransactions] = useState<Transaction[]>([]);
+  const [transactions, setTransactions] = useState<BudgetItem[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
-  const [budgetPlans, setBudgetPlans] = useState<BudgetPlan[]>([]);
+  const [summary, setSummary] = useState<MonthlySummary | null>(null);
+  const [annualSummary, setAnnualSummary] = useState<AnnualSummary | null>(null);
 
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
@@ -86,10 +181,15 @@ export default function SnapshotPage() {
       const queryMonth = mode === 'monthly' ? selectedMonth : undefined;
       const queryYear = selectedYear;
 
-      const [txResult, catsResult, plansResult] = await Promise.allSettled([
-        getTransactions(queryMonth, queryYear),
+      const summaryPromise =
+        mode === 'monthly'
+          ? getSummary(selectedMonth, selectedYear)
+          : getAnnualSummary(selectedYear);
+
+      const [txResult, catsResult, summaryResult] = await Promise.allSettled([
+        getBudgetItems(queryMonth, queryYear),
         getCategories(),
-        getBudgetPlans(queryMonth, queryYear),
+        summaryPromise,
       ]);
       if (cancelled) return;
 
@@ -99,21 +199,30 @@ export default function SnapshotPage() {
         console.error('Error loading categories:', catsResult.reason);
       }
 
-      if (plansResult.status === 'fulfilled') {
-        setBudgetPlans(plansResult.value);
-      } else {
-        console.error('Error loading budget plans:', plansResult.reason);
-      }
-
       if (txResult.status === 'fulfilled') {
         const realTx = txResult.value.filter(
-          (item): item is Transaction =>
+          (item): item is BudgetItem =>
             (item as { isProjection?: boolean }).isProjection !== true,
         );
         setTransactions(realTx);
       } else {
         console.error('Error loading transactions:', txResult.reason);
         setTransactions([]);
+        setError('שגיאה בטעינת הנתונים. נסה לרענן את הדף.');
+      }
+
+      if (summaryResult.status === 'fulfilled') {
+        if (mode === 'monthly') {
+          setSummary(summaryResult.value as MonthlySummary);
+          setAnnualSummary(null);
+        } else {
+          setAnnualSummary(summaryResult.value as AnnualSummary);
+          setSummary(null);
+        }
+      } else {
+        console.error('Error loading summary:', summaryResult.reason);
+        setSummary(null);
+        setAnnualSummary(null);
         setError('שגיאה בטעינת הנתונים. נסה לרענן את הדף.');
       }
 
@@ -138,27 +247,6 @@ export default function SnapshotPage() {
     [transactions, mode, selectedMonth, selectedYear],
   );
 
-  const { incomeTotal, expenseTotal } = useMemo(() => {
-    let income = 0;
-    let expense = 0;
-    const targetFrequency =
-      mode === 'monthly'
-        ? CategoryFrequency.MONTHLY
-        : CategoryFrequency.YEARLY;
-    periodTransactions.forEach((tx) => {
-      if (tx.frequency !== targetFrequency) return;
-      if (!tx.categoryId) return;
-      const category = categoryById.get(tx.categoryId);
-      if (!category) return;
-      const amount = parseFloat(tx.amount) || 0;
-      if (category.type === CategoryType.INCOME) income += amount;
-      else if (category.type === CategoryType.EXPENSE) expense += amount;
-    });
-    return { incomeTotal: income, expenseTotal: expense };
-  }, [periodTransactions, categoryById, mode]);
-
-  const balance = incomeTotal - expenseTotal;
-
   return (
     <div className="p-6 md:p-8 space-y-6">
       <header className="flex items-center gap-3 mb-2">
@@ -173,14 +261,7 @@ export default function SnapshotPage() {
         סקירה כוללת של ההכנסות וההוצאות שלך — חודשית או שנתית.
       </p>
 
-      <PeriodToggle
-        mode={mode}
-        onModeChange={setMode}
-        selectedMonth={selectedMonth}
-        selectedYear={selectedYear}
-        onMonthChange={setSelectedMonth}
-        onYearChange={setSelectedYear}
-      />
+      <PeriodToggle mode={mode} onModeChange={setMode} />
 
       {error && <ErrorBlock message={error} />}
 
@@ -189,34 +270,28 @@ export default function SnapshotPage() {
       ) : (
         !error && (
           <>
-            <SummaryCards
-              income={incomeTotal}
-              expense={expenseTotal}
-              balance={balance}
-            />
+            {mode === 'monthly' && summary && (
+              <SnapshotMonthlyOverview summary={summary} />
+            )}
+            {mode === 'yearly' && annualSummary && (
+              <AnnualSummaryCards summary={annualSummary} />
+            )}
 
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              <CategoryPieChart
-                transactions={periodTransactions}
-                categoryById={categoryById}
-                mode={mode}
-              />
-              <SnapshotCalendar
-                mode={mode}
-                year={selectedYear}
-                month={selectedMonth}
-                transactions={periodTransactions}
-                categoryById={categoryById}
-                budgetPlans={budgetPlans}
-              />
-            </div>
+            {mode === 'monthly' && (
+              <>
+                <CategoryPieChart
+                  transactions={periodTransactions}
+                  categoryById={categoryById}
+                  mode={mode}
+                />
 
-            <TransactionsList
-              mode={mode}
-              transactions={periodTransactions}
-              categoryById={categoryById}
-              year={selectedYear}
-            />
+                <TransactionsList
+                  mode={mode}
+                  transactions={periodTransactions}
+                  categoryById={categoryById}
+                />
+              </>
+            )}
           </>
         )
       )}

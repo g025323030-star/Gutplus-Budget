@@ -34,6 +34,7 @@ export interface MeResponse {
   householdId: string | null;
   onboardingCompleted: boolean;
   expenseTemplatesInitialized: boolean;
+  incomeTemplatesInitialized: boolean;
 }
 
 export interface CompleteOnboardingResponse {
