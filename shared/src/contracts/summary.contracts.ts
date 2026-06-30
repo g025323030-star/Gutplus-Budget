@@ -29,7 +29,12 @@ export interface SummaryExpenses {
 export interface MonthlySummary {
   incomes: SummaryIncomes;
   expenses: SummaryExpenses;
+  /** Total debt repayments (= debtRepaymentsMonthly + debtRepaymentsYearly). */
   debtRepayments: number;
+  /** Debt-category items of MONTHLY frequency (plain recurring). */
+  debtRepaymentsMonthly: number;
+  /** Debt-category items of any non-monthly frequency (yearly-distributed, ÷12 dry-averaged). */
+  debtRepaymentsYearly: number;
   balanceBeforeDebts: number;
   balanceAfterDebts: number;
 }

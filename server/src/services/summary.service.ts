@@ -405,6 +405,8 @@ export function aggregateMonth(
   let expensesHolidays = 0n;
   let expensesInstallments = 0n;
   let debtRepayments = 0n;
+  let debtRepaymentsMonthly = 0n;
+  let debtRepaymentsYearly = 0n;
   let hadTargetAmount = false;
 
   // Per-breakout accumulators (initialized so every configured breakout is
@@ -454,6 +456,20 @@ export function aggregateMonth(
 
     if (isDebt) {
       debtRepayments += ilsCents;
+      // Same MONTHLY-vs-everything-else predicate used for income bucketing
+      // below, so the two debt totals line up with incomes.monthly/yearly
+      // and expenses.monthly/yearly for the per-mode Snapshot cards.
+      if (
+        item.frequency === CategoryFrequency.MONTHLY &&
+        item.baseMonth === null &&
+        item.installmentGroupId === null &&
+        !item.isOneTime &&
+        item.holiday === null
+      ) {
+        debtRepaymentsMonthly += ilsCents;
+      } else {
+        debtRepaymentsYearly += ilsCents;
+      }
       continue;
     }
 
@@ -513,6 +529,8 @@ export function aggregateMonth(
   const expensesHolidaysNum = round2(expensesHolidays);
   const expensesInstallmentsNum = round2(expensesInstallments);
   const debtRepaymentsNum = round2(debtRepayments);
+  const debtRepaymentsMonthlyNum = round2(debtRepaymentsMonthly);
+  const debtRepaymentsYearlyNum = round2(debtRepaymentsYearly);
 
   const breakouts = [...breakoutCents.entries()].map(([name, cents]) => ({
     name,
@@ -547,6 +565,8 @@ export function aggregateMonth(
       breakouts,
     },
     debtRepayments: debtRepaymentsNum,
+    debtRepaymentsMonthly: debtRepaymentsMonthlyNum,
+    debtRepaymentsYearly: debtRepaymentsYearlyNum,
     balanceBeforeDebts,
     balanceAfterDebts,
   };
