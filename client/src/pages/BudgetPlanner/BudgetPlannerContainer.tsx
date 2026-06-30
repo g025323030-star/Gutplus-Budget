@@ -1,11 +1,11 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   AlertCircle,
   LayoutDashboard,
   TableProperties,
   Wallet,
 } from 'lucide-react';
-import type { BudgetLineItem } from '@gutplus/shared';
+import type { BudgetLineItem, MonthlyForecast } from '@gutplus/shared';
 import { ICON_STROKE } from '../../constants/ui';
 import { getBudgetForecast } from '../../services/forecast.service';
 import { getLineItems } from '../../services/execution.service';
@@ -79,26 +79,32 @@ export default function BudgetPlannerContainer() {
   const [selectedMonth, setSelectedMonth] = useState(0);
   const [viewMode, setViewMode] = useState<ViewMode>('dashboard');
 
+  // Shared fetch core for both the initial load and silent background
+  // refreshes after an edit — always re-fetches the full 12-month forecast
+  // plus every month's line items, since a single item's edit can shift a
+  // yearly-spread item's redistribution across OTHER months too (server-side
+  // recompute), which only a fresh fetch can surface.
+  const fetchBudgetData = async (): Promise<{
+    months: MonthlyForecast[];
+    lineItemsPerMonth: BudgetLineItem[][];
+  }> => {
+    const months = await getBudgetForecast();
+    const lineItemsPerMonth = await Promise.all(
+      months.map((m) => getLineItems(m.month, m.year)),
+    );
+    return { months, lineItemsPerMonth };
+  };
+
   useEffect(() => {
     let cancelled = false;
-    const fetchAll = async () => {
+    const loadInitial = async () => {
       setIsLoading(true);
       setError(null);
       try {
-        const months = await getBudgetForecast();
+        const { months, lineItemsPerMonth } = await fetchBudgetData();
         if (cancelled) return;
         setForecast(months);
-
-        try {
-          const lineItemsPerMonth = await Promise.all(
-            months.map((m) => getLineItems(m.month, m.year)),
-          );
-          if (cancelled) return;
-          setLineItemsByMonth(lineItemsPerMonth);
-        } catch (lineItemsErr) {
-          console.error('Error loading budget line items:', lineItemsErr);
-          if (!cancelled) setLineItemsByMonth(months.map(() => []));
-        }
+        setLineItemsByMonth(lineItemsPerMonth);
       } catch (err) {
         console.error('Error loading budget forecast:', err);
         if (!cancelled) setError('שגיאה בטעינת התקציב. נסה לרענן את הדף.');
@@ -106,10 +112,32 @@ export default function BudgetPlannerContainer() {
         if (!cancelled) setIsLoading(false);
       }
     };
-    fetchAll();
+    loadInitial();
     return () => {
       cancelled = true;
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Cross-view reactivity fix: after a successful edit in the monthly
+  // accordion view, re-fetch the forecast + every month's line items in the
+  // background (no loading skeleton, no error banner) so the Yearly
+  // Spreadsheet view — and any other month's accordion — picks up the change
+  // immediately instead of requiring a manual page reload. This is the
+  // manual equivalent of "invalidate both query caches" in a codebase with
+  // no query-caching library (no React Query here — data fetching is plain
+  // useState/useEffect throughout).
+  const refetchBudgetData = useCallback(async () => {
+    try {
+      const { months, lineItemsPerMonth } = await fetchBudgetData();
+      setForecast(months);
+      setLineItemsByMonth(lineItemsPerMonth);
+    } catch (err) {
+      console.error('Error refreshing budget data after edit:', err);
+      // Keep showing the existing (already-optimistically-updated) state —
+      // a background refresh failing shouldn't surface a page-level error.
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const data = useMemo(() => buildBudgetView(forecast), [forecast]);
@@ -166,8 +194,10 @@ export default function BudgetPlannerContainer() {
                   selectedMonth={selectedMonth}
                   onSelect={setSelectedMonth}
                 />
-                {selectedMonthMeta && <SummaryCards summary={selectedMonthMeta} />}
-                <BudgetComparisonChart data={data} lineItemsByMonth={lineItemsByMonth} />
+                <SummaryCards
+                  lineItems={selectedLineItems}
+                  holidays={selectedMonthMeta?.holidays}
+                />
                 <SingleMonthView
                   data={data}
                   monthIndex={selectedMonth}
@@ -177,7 +207,9 @@ export default function BudgetPlannerContainer() {
                   onLineItemsChange={(items) =>
                     handleLineItemsChange(selectedMonth, items)
                   }
+                  onAfterCommit={refetchBudgetData}
                 />
+                <BudgetComparisonChart data={data} lineItemsByMonth={lineItemsByMonth} />
               </>
             ) : (
               <>
@@ -186,7 +218,7 @@ export default function BudgetPlannerContainer() {
                   monthIndex={selectedMonth}
                   period="year"
                 />
-                <YearlySpreadsheetView data={data} />
+                <YearlySpreadsheetView data={data} lineItemsByMonth={lineItemsByMonth} />
               </>
             )}
           </>

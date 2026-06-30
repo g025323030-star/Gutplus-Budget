@@ -34,6 +34,79 @@ const BREAKOUT_LABELS: Record<string, string> = {
 export const formatILS = (value: number): string =>
   `${Math.round(value).toLocaleString('he-IL')} ₪`;
 
+/**
+ * Parses a decimal-string field into a number, treating `null`/`undefined`/
+ * an empty/whitespace-only string/non-numeric text as "not entered" (`null`).
+ * `0`/`"0"`/`"0.00"` parse to the number `0`, which is NOT `null` — a
+ * deliberately entered zero must never be treated as "not entered".
+ */
+export function parseEnteredAmount(raw: string | null | undefined): number | null {
+  if (raw === null || raw === undefined || raw.trim() === '') return null;
+  const num = Number(raw);
+  return Number.isFinite(num) ? num : null;
+}
+
+/**
+ * Resolves one line item's single "live" value under a strict per-item
+ * cascade: Actual ("בפועל") -> New Forecast / override ("תכנון חדש", i.e.
+ * `currentForecast`) -> Baseline ("תכנון ראשוני"). Each tier is only skipped
+ * when the value is genuinely missing/invalid, never merely falsy (`0` is a
+ * valid, final answer at any tier). Used where forecast and actual need to
+ * collapse into one blended number (e.g. an accordion row's live total).
+ */
+export function resolveLiveItemValue(item: BudgetLineItem): number {
+  const actual = parseEnteredAmount(item.actual);
+  if (actual !== null) return actual;
+
+  const forecast = parseEnteredAmount(item.currentForecast);
+  if (forecast !== null) return forecast;
+
+  return parseEnteredAmount(item.baselineForecast) ?? 0;
+}
+
+/**
+ * Resolves one line item's "planned" value only — New Forecast / override if
+ * present, else Baseline. Deliberately ignores `actual`, unlike
+ * `resolveLiveItemValue`: used where planned and actual must be shown as two
+ * separate figures side by side (e.g. the top summary cards) rather than
+ * blended into one.
+ */
+export function resolvePlannedItemValue(item: BudgetLineItem): number {
+  const forecast = parseEnteredAmount(item.currentForecast);
+  if (forecast !== null) return forecast;
+
+  return parseEnteredAmount(item.baselineForecast) ?? 0;
+}
+
+/** Resolves one line item's logged actual only, or `0` if never entered. */
+export function resolveActualItemValue(item: BudgetLineItem): number {
+  return parseEnteredAmount(item.actual) ?? 0;
+}
+
+/** Every income-shaped `BudgetLineItemBucket`. */
+export const INCOME_BUCKETS: BudgetLineItemBucket[] = ['incomeMonthly', 'incomeYearly'];
+/**
+ * Every expense-shaped `BudgetLineItemBucket` except debt — debt is a
+ * separate financial obligation, not household consumption, and is handled
+ * as its own bucket (`'debt'`) wherever the distinction matters.
+ */
+export const EXPENSE_BUCKETS: BudgetLineItemBucket[] = [
+  'expenseMonthly',
+  'expenseYearlySpread',
+  'expenseYearlyThisMonth',
+  'expenseHolidays',
+  'expenseInstallments',
+  'breakout',
+];
+
+/** Sums `resolvePlannedItemValue` across a list of line items. */
+export const sumPlannedForItems = (items: BudgetLineItem[]): number =>
+  items.reduce((sum, item) => sum + resolvePlannedItemValue(item), 0);
+
+/** Sums `resolveActualItemValue` across a list of line items. */
+export const sumActualForItems = (items: BudgetLineItem[]): number =>
+  items.reduce((sum, item) => sum + resolveActualItemValue(item), 0);
+
 const breakoutAmount = (month: MonthlyForecast, name: string): number =>
   (month.expenses.breakouts ?? []).find((b) => b.name === name)?.amount ?? 0;
 

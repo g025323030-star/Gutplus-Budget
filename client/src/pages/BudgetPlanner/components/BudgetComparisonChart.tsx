@@ -72,7 +72,10 @@ export default function BudgetComparisonChart({
               width={80}
             />
             <Tooltip
-              formatter={(value) => currencyFormatter.format(Number(value) || 0)}
+              formatter={(value, name) => [
+                currencyFormatter.format(Number(value) || 0),
+                name === 'forecast' ? 'תחזית נוכחית' : 'בפועל',
+              ]}
             />
             <Legend
               verticalAlign="bottom"

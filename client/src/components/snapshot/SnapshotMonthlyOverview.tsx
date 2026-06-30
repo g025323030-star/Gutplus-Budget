@@ -14,67 +14,42 @@ const currencyFormatter = new Intl.NumberFormat('he-IL', {
 
 const formatILS = (value: number): string => currencyFormatter.format(value);
 
-interface BreakdownLineProps {
-  icon: React.ReactNode;
+interface CardShellProps {
   label: string;
-  recurringLabel: string;
-  recurringValue: number;
-  averageLabel: string;
-  averageValue: number;
-  total: number;
-  totalClassName: string;
+  icon: React.ReactNode;
+  children: React.ReactNode;
 }
 
-// A single compact row: a leading icon+label, the two contributing
-// sub-figures inline, and the combined total on the trailing edge.
-function BreakdownLine({
-  icon,
-  label,
-  recurringLabel,
-  recurringValue,
-  averageLabel,
-  averageValue,
-  total,
-  totalClassName,
-}: BreakdownLineProps) {
+function CardShell({ label, icon, children }: CardShellProps) {
   return (
-    <div className="flex flex-wrap items-center justify-between gap-3 py-2">
-      <span className="body-text-sm text-slate-500 flex items-center gap-2">
+    <div className="bg-surface rounded-2xl shadow-sm border border-slate-100 p-6 transition-all duration-300 hover:shadow-md">
+      <div className="flex items-center justify-between mb-4">
+        <span className="label-text">{label}</span>
         {icon}
-        {label}
-      </span>
-      <div className="flex flex-wrap items-center gap-4">
-        <span className="body-text-sm text-slate-500">
-          {recurringLabel}:{' '}
-          <span className="font-medium text-slate-600">
-            {formatILS(recurringValue)}
-          </span>
-        </span>
-        <span className="body-text-sm text-slate-500">
-          {averageLabel}:{' '}
-          <span className="font-medium text-slate-600">
-            {formatILS(averageValue)}
-          </span>
-        </span>
-        <span className={`body-text font-semibold ${totalClassName}`}>
-          {formatILS(total)}
-        </span>
       </div>
+      {children}
     </div>
   );
 }
 
-interface FigureProps {
+interface SubRowProps {
   label: string;
   value: number;
+  bordered?: boolean;
   valueClassName?: string;
 }
 
-function Figure({ label, value, valueClassName }: FigureProps) {
+function SubRow({ label, value, bordered = false, valueClassName }: SubRowProps) {
   return (
-    <div className="flex flex-col gap-1">
-      <span className="label-text">{label}</span>
-      <span className={`heading-3 ${valueClassName ?? ''}`}>
+    <div
+      className={`flex items-center justify-between gap-3 py-1.5 ${
+        bordered ? 'mt-1.5 pt-2.5 border-t border-slate-100' : ''
+      }`}
+    >
+      <span className="body-text-sm text-slate-500">{label}</span>
+      <span
+        className={`body-text-sm font-medium ${valueClassName ?? 'text-slate-600'}`}
+      >
         {formatILS(value)}
       </span>
     </div>
@@ -91,76 +66,84 @@ export default function SnapshotMonthlyOverview({
     0,
   );
 
+  // Card 1 — household consumption: every dry monthly-average EXPENSE
+  // bucket, explicitly excluding debtRepayments (debt is a separate
+  // financial obligation, not household consumption).
   const specialBundle =
     expenses.yearly + expenses.holidays + expenses.installments + breakoutsTotal;
-
-  const totalIncome = incomes.monthly + incomes.yearly;
   const totalExpenses = expenses.monthly + specialBundle;
+
+  // Card 2 — dry monthly-average INCOME total.
+  const totalIncome = incomes.monthly + incomes.yearly;
+
+  const balanceBefore = summary.balanceBeforeDebts;
   const balanceAfter = summary.balanceAfterDebts;
-  const balanceClass = balanceAfter >= 0 ? 'text-green-500' : 'text-red-500';
+  const afterClass = balanceAfter >= 0 ? 'text-green-500' : 'text-red-500';
+  const beforeClass = balanceBefore >= 0 ? 'text-primary' : 'text-red-500';
 
   return (
-    <div className="bg-surface rounded-2xl shadow-sm border border-slate-100 p-6 space-y-1">
-      <BreakdownLine
-        icon={
-          <TrendingUp
-            className="text-green-500"
-            size={18}
-            strokeWidth={ICON_STROKE}
-          />
-        }
-        label="הכנסות"
-        recurringLabel="קבועות"
-        recurringValue={incomes.monthly}
-        averageLabel="שנתיות (ממוצע חודשי)"
-        averageValue={incomes.yearly}
-        total={totalIncome}
-        totalClassName="text-green-500"
-      />
-      <div className="border-t border-slate-100" />
-      <BreakdownLine
+    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+      {/* Card 1 — how much our home consumes */}
+      <CardShell
+        label="כמה הבית שלנו צורך"
         icon={
           <TrendingDown
             className="text-red-500"
-            size={18}
+            size={22}
             strokeWidth={ICON_STROKE}
           />
         }
-        label="הוצאות"
-        recurringLabel="קבועות"
-        recurringValue={expenses.monthly}
-        averageLabel="שנתיות/חגים/תשלומים (ממוצע חודשי)"
-        averageValue={specialBundle}
-        total={totalExpenses}
-        totalClassName="text-red-500"
-      />
+      >
+        <p className="heading-3 text-red-500 mb-3">{formatILS(totalExpenses)}</p>
+        <SubRow label="הוצאות קבועות" value={expenses.monthly} />
+        <SubRow
+          label="הוצאות שנתיות/חגים/תשלומים (ממוצע חודשי)"
+          value={specialBundle}
+        />
+      </CardShell>
 
-      <div className="flex items-center gap-2 mt-4 mb-3 pt-3 border-t border-slate-100">
-        <Wallet className="text-accent" size={20} strokeWidth={ICON_STROKE} />
-        <span className="label-text">סיכום חודשי</span>
-      </div>
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-        <Figure
-          label="סך הכנסות חודשיות"
-          value={totalIncome}
-          valueClassName="text-green-500"
-        />
-        <Figure
-          label="סך הוצאות חודשיות"
-          value={totalExpenses}
-          valueClassName="text-red-500"
-        />
-        <Figure
+      {/* Card 2 — our monthly income */}
+      <CardShell
+        label="ההכנסות החודשיות שלנו"
+        icon={
+          <TrendingUp
+            className="text-green-500"
+            size={22}
+            strokeWidth={ICON_STROKE}
+          />
+        }
+      >
+        <p className="heading-3 text-green-500 mb-3">{formatILS(totalIncome)}</p>
+        <SubRow label="הכנסות שוטפות חודשיות" value={incomes.monthly} />
+        <SubRow label="הכנסות שנתיות (ממוצע חודשי)" value={incomes.yearly} />
+      </CardShell>
+
+      {/* Card 3 — summary: income vs. expenses, debt, net balance */}
+      <CardShell
+        label="סיכום חודשי"
+        icon={
+          <Wallet className="text-accent" size={22} strokeWidth={ICON_STROKE} />
+        }
+      >
+        {/* <SubRow label="הכנסות" value={totalIncome} valueClassName="text-green-500" />
+        <SubRow label="הוצאות" value={totalExpenses} valueClassName="text-red-500" /> */}
+        <SubRow
           label="החזרי חובות"
           value={debtRepayments}
-          valueClassName="text-primary"
+          bordered
+          valueClassName="text-primary font-semibold"
         />
-        <Figure
-          label="יתרה נטו לאחר החזרים"
-          value={balanceAfter}
-          valueClassName={balanceClass}
-        />
-      </div>
+        <div className="flex items-center justify-between gap-3 mt-1.5 pt-2.5 border-t border-slate-100">
+          <span className="body-text-sm text-slate-500">יתרה ללא החזרי חובות</span>
+          <span className={`body-text font-medium ${beforeClass}`}>
+            {formatILS(balanceBefore)}
+          </span>
+        </div>
+        <div className="pt-2.5 border-t border-slate-100 mt-1.5">
+          <span className="body-text-sm text-slate-500">יתרה כולל החזרי חובות</span>
+          <p className={`heading-3 mt-1 ${afterClass}`}>{formatILS(balanceAfter)}</p>
+        </div>
+      </CardShell>
     </div>
   );
 }

@@ -3,7 +3,8 @@ import { AnimatePresence, motion } from 'framer-motion';
 import { ChevronDown } from 'lucide-react';
 import type { BudgetLineItem } from '@gutplus/shared';
 import { ICON_STROKE } from '../../../constants/ui';
-import { formatILS } from '../budget.utils';
+import { formatILS, parseEnteredAmount, resolveLiveItemValue } from '../budget.utils';
+import BudgetFieldsLegend from './BudgetFieldsLegend';
 import BudgetLineItemRow from './BudgetLineItemRow';
 
 export interface AccordionRowProps {
@@ -14,7 +15,7 @@ export interface AccordionRowProps {
   items: BudgetLineItem[];
   onCommit: (
     budgetItemId: string,
-    patch: { forecastOverride?: string } | { actual?: string },
+    patch: { forecastOverride: string | null } | { actual: string | null },
   ) => Promise<void>;
 }
 
@@ -38,13 +39,40 @@ export default function AccordionRow({
   const [expanded, setExpanded] = useState(false);
   const isEmpty = items.length === 0;
 
+  // Live total = sum of each item's resolved value, per a strict per-item
+  // cascade: Actual -> New Forecast (override) -> Baseline. `0` is a valid
+  // entered value at any tier and must not fall through to the next one —
+  // only a missing/empty/non-numeric value falls through.
+  const liveTotal = items.reduce((sum, item) => sum + resolveLiveItemValue(item), 0);
+  // Baseline total = sum of each item's own baselineForecast, independent of
+  // any override/actual — the fixed reference point shown when it diverges
+  // from the live total.
+  const baselineTotal = items.reduce(
+    (sum, item) => sum + (parseEnteredAmount(item.baselineForecast) ?? 0),
+    0,
+  );
+  const hasChanged = !isEmpty && Math.abs(liveTotal - baselineTotal) > 0.005;
+
+  const totals = hasChanged ? (
+    <>
+      <span className="text-xs text-slate-400 tabular-nums whitespace-nowrap">
+        תכנון ראשוני: {formatILS(baselineTotal)}
+      </span>
+      <span className={`body-text font-semibold ${valueClassName}`}>
+        {formatILS(liveTotal)}
+      </span>
+    </>
+  ) : (
+    <span className={`body-text font-semibold ${valueClassName}`}>
+      {isEmpty ? formatILS(value) : formatILS(liveTotal)}
+    </span>
+  );
+
   if (isEmpty) {
     return (
       <div className="flex items-center justify-between gap-3 bg-surface rounded-xl border border-slate-100 shadow-sm px-4 py-3">
         <span className="body-text-sm text-slate-600">{label}</span>
-        <span className={`body-text font-semibold ${valueClassName}`}>
-          {formatILS(value)}
-        </span>
+        <div className="flex items-center gap-2">{totals}</div>
       </div>
     );
   }
@@ -59,9 +87,7 @@ export default function AccordionRow({
       >
         <span className="body-text-sm text-slate-600">{label}</span>
         <div className="flex items-center gap-2">
-          <span className={`body-text font-semibold ${valueClassName}`}>
-            {formatILS(value)}
-          </span>
+          {totals}
           <ChevronDown
             size={18}
             strokeWidth={ICON_STROKE}
@@ -81,7 +107,8 @@ export default function AccordionRow({
             transition={{ duration: 0.22, ease: 'easeOut' }}
             className="overflow-hidden"
           >
-            <div className="px-3 pb-3 pt-1 space-y-2 border-t border-slate-100">
+            <div className="px-3 pb-3 pt-2 space-y-2 border-t border-slate-100">
+              <BudgetFieldsLegend />
               {items.map((item) => (
                 <BudgetLineItemRow key={item.budgetItemId} item={item} onCommit={onCommit} />
               ))}

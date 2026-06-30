@@ -6,6 +6,7 @@ import {
   PieChart,
   ResponsiveContainer,
   Tooltip,
+  type TooltipContentProps,
 } from 'recharts';
 import { PieChart as PieChartIcon } from 'lucide-react';
 import { CategoryFrequency, CategoryType } from '@gutplus/shared';
@@ -39,6 +40,28 @@ const currencyFormatter = new Intl.NumberFormat('he-IL', {
   maximumFractionDigits: 0,
 });
 
+// Main categories consolidated into a single "הוצאות ביתיות" slice so the
+// chart isn't dominated by many small, similarly-sized household expenses.
+const HOUSING_GROUP_NAME = 'הוצאות ביתיות';
+const HOUSING_GROUP_CATEGORIES = new Set([
+  'בריאות',
+  'הוצאות ביתיות',
+  'הוצאות שוטפות',
+  'מנויים',
+  'שונות שוטפות',
+]);
+
+interface CategoryBreakdownItem {
+  name: string;
+  value: number;
+}
+
+interface CategoryChartDatum {
+  name: string;
+  value: number;
+  breakdown?: CategoryBreakdownItem[];
+}
+
 // Walks parentCategoryId up from the given category until it finds the
 // main/root category (parentCategoryId === null). Falls back to the
 // starting category if the chain can't be resolved (e.g. dangling parent
@@ -58,13 +81,52 @@ const resolveMainCategory = (
   return current;
 };
 
+function renderCategoryTooltip({ active, payload }: TooltipContentProps) {
+  if (!active || !payload || payload.length === 0) return null;
+  const datum = payload[0]?.payload as CategoryChartDatum | undefined;
+  if (!datum) return null;
+
+  return (
+    <div
+      dir="rtl"
+      className="bg-surface border border-slate-100 rounded-xl shadow-md p-3 text-sm min-w-[180px]"
+    >
+      {datum.breakdown && datum.breakdown.length > 0 ? (
+        <>
+          <p className="label-text mb-2">{datum.name}</p>
+          <ul className="space-y-1">
+            {datum.breakdown.map((item) => {
+              const percentage =
+                datum.value > 0
+                  ? Math.round((item.value / datum.value) * 100)
+                  : 0;
+              return (
+                <li key={item.name} className="body-text-sm text-slate-600">
+                  {`${item.name}: ${currencyFormatter.format(item.value)} (${percentage}%)`}
+                </li>
+              );
+            })}
+          </ul>
+        </>
+      ) : (
+        <p className="body-text-sm text-primary">
+          {`${datum.name}: ${currencyFormatter.format(datum.value)}`}
+        </p>
+      )}
+    </div>
+  );
+}
+
 export default function CategoryPieChart({
   transactions,
   categoryById,
   mode,
 }: CategoryPieChartProps) {
-  const data = useMemo(() => {
+  const data = useMemo<CategoryChartDatum[]>(() => {
     const totals = new Map<string, number>();
+    // Per-sub-category totals feeding the consolidated housing slice,
+    // keyed by main category id, so the tooltip can break them back out.
+    const housingBreakdown = new Map<string, number>();
 
     const targetFrequency =
       mode === 'monthly'
@@ -82,17 +144,37 @@ export default function CategoryPieChart({
       // only actually apply every other month — halve for the monthly
       // average shown here, matching BudgetItemRow's display halving.
       const amount = tx.baseMonth != null ? rawAmount / 2 : rawAmount;
-      totals.set(
-        mainCategory.id,
-        (totals.get(mainCategory.id) ?? 0) + amount,
-      );
+
+      if (HOUSING_GROUP_CATEGORIES.has(mainCategory.name)) {
+        totals.set(
+          HOUSING_GROUP_NAME,
+          (totals.get(HOUSING_GROUP_NAME) ?? 0) + amount,
+        );
+        housingBreakdown.set(
+          mainCategory.id,
+          (housingBreakdown.get(mainCategory.id) ?? 0) + amount,
+        );
+      } else {
+        totals.set(
+          mainCategory.id,
+          (totals.get(mainCategory.id) ?? 0) + amount,
+        );
+      }
     });
 
     return Array.from(totals.entries())
-      .map(([id, value]) => ({
-        name: categoryById.get(id)?.name ?? 'אחר',
-        value,
-      }))
+      .map(([key, value]) => {
+        if (key === HOUSING_GROUP_NAME) {
+          const breakdown = Array.from(housingBreakdown.entries())
+            .map(([id, subValue]) => ({
+              name: categoryById.get(id)?.name ?? 'אחר',
+              value: subValue,
+            }))
+            .sort((a, b) => b.value - a.value);
+          return { name: HOUSING_GROUP_NAME, value, breakdown };
+        }
+        return { name: categoryById.get(key)?.name ?? 'אחר', value };
+      })
       .sort((a, b) => b.value - a.value);
   }, [transactions, categoryById, mode]);
 
@@ -132,11 +214,7 @@ export default function CategoryPieChart({
                 />
               ))}
             </Pie>
-            <Tooltip
-              formatter={(value) =>
-                currencyFormatter.format(Number(value) || 0)
-              }
-            />
+            <Tooltip content={renderCategoryTooltip} />
             <Legend
               verticalAlign="bottom"
               iconType="circle"

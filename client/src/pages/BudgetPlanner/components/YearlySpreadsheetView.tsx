@@ -1,13 +1,21 @@
+import type { BudgetLineItem } from '@gutplus/shared';
 import {
   calculateExpenseTotal,
   calculateIncomeTotal,
+  EXPENSE_BUCKETS,
   getMonthlyBalance,
+  INCOME_BUCKETS,
+  sumActualForItems,
+  sumPlannedForItems,
   type BudgetRow,
   type BudgetViewData,
 } from '../budget.utils';
 
 interface YearlySpreadsheetViewProps {
   data: BudgetViewData;
+  /** Line items per rolling-window month, same indexing as `data`'s rows —
+   * drives the "New Forecast Sum" and "Actual" tracking rows below. */
+  lineItemsByMonth: BudgetLineItem[][];
 }
 
 // Never render NaN/null/undefined: fall back to a clean dash. Zero is also shown
@@ -61,8 +69,31 @@ function DataRow({
   );
 }
 
+// A tracking row beneath a category's regular baseline total — "New Forecast
+// Sum" / "Actual" — styled lighter than the bold totals so the hierarchy
+// (baseline total -> planned -> actual) reads top to bottom.
+function MetricRow({
+  label,
+  values,
+  bgClassName,
+  textClassName,
+}: {
+  label: string;
+  values: number[];
+  bgClassName: string;
+  textClassName: string;
+}) {
+  return (
+    <tr className={`border-t border-slate-100 ${bgClassName} font-medium`}>
+      <td className={`${STICKY_LABEL} ${bgClassName} ${textClassName}`}>{label}</td>
+      <ValueCells values={values} className={textClassName} />
+    </tr>
+  );
+}
+
 export default function YearlySpreadsheetView({
   data,
+  lineItemsByMonth,
 }: YearlySpreadsheetViewProps) {
   const { monthLabels } = data;
   const monthIdx = monthLabels.map((_, i) => i);
@@ -70,6 +101,24 @@ export default function YearlySpreadsheetView({
   const incomeTotals = monthIdx.map((i) => calculateIncomeTotal(data, i));
   const expenseTotals = monthIdx.map((i) => calculateExpenseTotal(data, i));
   const balances = monthIdx.map((i) => getMonthlyBalance(data, i));
+
+  // "New Forecast Sum" (planned) and "Actual" tracking rows, per month —
+  // sourced from lineItemsByMonth (the same data driving the dashboard
+  // accordions), not from `data`/`forecast`, so these always reflect
+  // whatever was last entered. Expense totals include the debt bucket to
+  // match calculateExpenseTotal's own definition above.
+  const incomeItemsByMonth = monthIdx.map((i) =>
+    (lineItemsByMonth[i] ?? []).filter((item) => INCOME_BUCKETS.includes(item.bucket)),
+  );
+  const expenseItemsByMonth = monthIdx.map((i) =>
+    (lineItemsByMonth[i] ?? []).filter(
+      (item) => EXPENSE_BUCKETS.includes(item.bucket) || item.bucket === 'debt',
+    ),
+  );
+  const incomePlannedTotals = incomeItemsByMonth.map(sumPlannedForItems);
+  const incomeActualTotals = incomeItemsByMonth.map(sumActualForItems);
+  const expensePlannedTotals = expenseItemsByMonth.map(sumPlannedForItems);
+  const expenseActualTotals = expenseItemsByMonth.map(sumActualForItems);
 
   return (
     <div className="bg-surface rounded-2xl shadow-sm border border-slate-100 p-6">
@@ -103,6 +152,18 @@ export default function YearlySpreadsheetView({
               </td>
               <ValueCells values={incomeTotals} className="text-emerald-700" />
             </tr>
+            <MetricRow
+              label="סכום התכנון החדש - הכנסות"
+              values={incomePlannedTotals}
+              bgClassName="bg-sky-50/50"
+              textClassName="text-sky-700"
+            />
+            <MetricRow
+              label="הכנסות בפועל"
+              values={incomeActualTotals}
+              bgClassName="bg-teal-50/50"
+              textClassName="text-teal-700"
+            />
 
             {/* Expenses */}
             {data.expenseRows.map((row) => (
@@ -115,6 +176,18 @@ export default function YearlySpreadsheetView({
               </td>
               <ValueCells values={expenseTotals} className="text-rose-700" />
             </tr>
+            <MetricRow
+              label="סכום התכנון החדש - הוצאות"
+              values={expensePlannedTotals}
+              bgClassName="bg-amber-50/50"
+              textClassName="text-amber-700"
+            />
+            <MetricRow
+              label="הוצאות בפועל"
+              values={expenseActualTotals}
+              bgClassName="bg-orange-50/50"
+              textClassName="text-orange-700"
+            />
 
             {/* Net balance */}
             <tr className="border-t-2 border-amber-200 bg-amber-50 font-bold">

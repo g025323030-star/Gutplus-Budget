@@ -1,9 +1,9 @@
 import { Repository } from 'typeorm';
-import { CurrencyCode, MonthlyForecast } from '@gutplus/shared';
+import { CurrencyCode, Holiday, MonthlyForecast } from '@gutplus/shared';
 import { AppDataSource } from '../config/data-source';
 import { BudgetItem } from '../entities/budget-item.entity';
 import { Category } from '../entities/category.entity';
-import { aggregateMonth, resolveCategoryBreakdowns } from './summary.service';
+import { aggregateMonth, isItemIncludedInMonth, resolveCategoryBreakdowns } from './summary.service';
 import { exchangeRateService } from './exchange-rate.service';
 import { buildForecastOverrides } from './execution.service';
 import { getMonthSlots } from '../utils/rolling-window.util';
@@ -91,11 +91,22 @@ export class ForecastService {
         forecastOverrides,
       );
 
+      // Distinct holidays whose items land in this exact month (exact timing,
+      // not the dry average — same source list `items`, no extra query).
+      const holidays = [
+        ...new Set(
+          items
+            .filter(item => item.holiday !== null && isItemIncludedInMonth(item, month, year))
+            .map(item => item.holiday as Holiday),
+        ),
+      ];
+
       results.push({
         ...summary,
         month,
         year,
         isTargetBased: hadTargetAmount,
+        holidays,
       });
     }
 

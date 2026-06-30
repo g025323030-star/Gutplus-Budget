@@ -18,6 +18,14 @@ interface SingleMonthViewProps {
   month: number;
   year: number;
   onLineItemsChange: (items: BudgetLineItem[]) => void;
+  /**
+   * Called (not awaited by the UI interaction) after a successful commit, to
+   * refresh the full forecast + every month's line items in the background —
+   * a single edit can shift a yearly-spread item's redistribution across
+   * other months too, which only a fresh fetch can surface (see
+   * `BudgetPlannerContainer.tsx`'s `refetchBudgetData`).
+   */
+  onAfterCommit: () => Promise<void>;
 }
 
 interface ColumnProps {
@@ -31,7 +39,7 @@ interface ColumnProps {
   lineItems: BudgetLineItem[];
   onCommit: (
     budgetItemId: string,
-    patch: { forecastOverride?: string } | { actual?: string },
+    patch: { forecastOverride: string | null } | { actual: string | null },
   ) => Promise<void>;
 }
 
@@ -77,6 +85,7 @@ export default function SingleMonthView({
   month,
   year,
   onLineItemsChange,
+  onAfterCommit,
 }: SingleMonthViewProps) {
   const incomeTotal = calculateIncomeTotal(data, monthIndex);
   const expenseTotal = calculateExpenseTotal(data, monthIndex);
@@ -84,13 +93,35 @@ export default function SingleMonthView({
 
   const handleCommit = async (
     budgetItemId: string,
-    patch: { forecastOverride?: string } | { actual?: string },
+    patch: { forecastOverride: string | null } | { actual: string | null },
   ): Promise<void> => {
     await upsertExecution(budgetItemId, month, year, patch);
-    const next = lineItems.map((item) =>
-      item.budgetItemId === budgetItemId ? { ...item, ...patch } : item,
-    );
+    // Map the PUT payload's field names to BudgetLineItem's own field names
+    // ("forecastOverride" -> "currentForecast") — a plain `{ ...item, ...patch }`
+    // spread would add a stray `forecastOverride` key instead of updating
+    // `currentForecast`, leaving the displayed/aggregated forecast stale after
+    // a save. A cleared override (`null`) reverts `currentForecast` to the
+    // item's own `baselineForecast` (matching what a fresh fetch would show,
+    // since the server falls back to baseline when no override row exists)
+    // — `currentForecast` itself is never null per its type. `actual` IS
+    // nullable, so a cleared actual is set to `null` directly.
+    const next = lineItems.map((item) => {
+      if (item.budgetItemId !== budgetItemId) return item;
+      if ('forecastOverride' in patch) {
+        return {
+          ...item,
+          currentForecast: patch.forecastOverride ?? item.baselineForecast,
+        };
+      }
+      return { ...item, actual: patch.actual };
+    });
     onLineItemsChange(next);
+
+    // Fire-and-forget: don't block the input's own save-state on this — it
+    // resolves once the optimistic update above is already visible, then
+    // corrects/refreshes everything (other months, the Yearly Spreadsheet
+    // view) once the background refetch completes.
+    void onAfterCommit();
   };
 
   return (

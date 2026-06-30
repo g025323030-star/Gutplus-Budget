@@ -1,5 +1,6 @@
 import type { MonthlySummary } from './summary.contracts';
 import type { SuccessResponse } from './common.contracts';
+import type { Holiday } from '../enums';
 
 /**
  * A single month's forecast entry.
@@ -16,6 +17,11 @@ export interface MonthlyForecast extends MonthlySummary {
    * `targetAmount` which was used as its contributing amount.
    */
   isTargetBased: boolean;
+  /**
+   * Distinct holidays whose items land in this month, by exact timing (see
+   * `isItemIncludedInMonth`). Empty when no holiday falls in this month.
+   */
+  holidays: Holiday[];
 }
 
 export interface BudgetForecastData {

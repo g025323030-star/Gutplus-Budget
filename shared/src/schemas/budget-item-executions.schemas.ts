@@ -10,11 +10,15 @@ export const upsertBudgetItemExecutionSchema = z
     actual: decimalStringSchema.optional().nullable(),
   })
   .superRefine((value, ctx) => {
-    const hasForecastOverride =
-      value.forecastOverride !== undefined && value.forecastOverride !== null;
-    const hasActual = value.actual !== undefined && value.actual !== null;
+    // A key explicitly sent as `null` means "clear this field" — that's a
+    // real instruction, not "nothing provided". Only the key being entirely
+    // absent (`undefined`) means "don't touch this field". Without this
+    // distinction, clearing a field (sending `{ forecastOverride: null }`
+    // alone) would be wrongly rejected as "neither field provided".
+    const hasForecastOverrideKey = value.forecastOverride !== undefined;
+    const hasActualKey = value.actual !== undefined;
 
-    if (!hasForecastOverride && !hasActual) {
+    if (!hasForecastOverrideKey && !hasActualKey) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
         message: 'At least one of forecastOverride or actual must be provided',

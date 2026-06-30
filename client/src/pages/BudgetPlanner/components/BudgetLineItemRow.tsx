@@ -11,7 +11,7 @@ export interface BudgetLineItemRowProps {
   item: BudgetLineItem;
   onCommit: (
     budgetItemId: string,
-    patch: { forecastOverride?: string } | { actual?: string },
+    patch: { forecastOverride: string | null } | { actual: string | null },
   ) => Promise<void>;
 }
 
@@ -32,20 +32,21 @@ export default function BudgetLineItemRow({ item, onCommit }: BudgetLineItemRowP
   const hasActual = item.actual !== null && actualDraft.trim() !== '';
   const numericActual = Number(actualDraft);
   const numericForecast = Number(currentForecastDraft);
+  // Income: more than planned is good (green), less is bad (red) — the
+  // opposite of expenses, where spending more than planned is bad.
+  const isIncome = item.bucket === 'incomeMonthly' || item.bucket === 'incomeYearly';
+
+  const hasVariance =
+    hasActual &&
+    Number.isFinite(numericActual) &&
+    Number.isFinite(numericForecast) &&
+    numericActual.toFixed(2) !== numericForecast.toFixed(2);
 
   const isExceedance =
-    hasActual &&
-    Number.isFinite(numericActual) &&
-    Number.isFinite(numericForecast) &&
-    numericActual.toFixed(2) !== numericForecast.toFixed(2) &&
-    numericActual > numericForecast;
+    hasVariance && (isIncome ? numericActual < numericForecast : numericActual > numericForecast);
 
   const isUnderBudget =
-    hasActual &&
-    Number.isFinite(numericActual) &&
-    Number.isFinite(numericForecast) &&
-    numericActual.toFixed(2) !== numericForecast.toFixed(2) &&
-    numericActual < numericForecast;
+    hasVariance && (isIncome ? numericActual > numericForecast : numericActual < numericForecast);
 
   // Neither exceedance nor under-budget (exact match, or actual not yet
   // entered/not a valid number) → neutral style, no subtext.
@@ -56,13 +57,33 @@ export default function BudgetLineItemRow({ item, onCommit }: BudgetLineItemRowP
       : 'border-slate-200 text-primary focus:border-accent';
 
   const subtext = isExceedance
-    ? 'חריגה מהתקציב שנקבע'
+    ? isIncome
+      ? `חסר ביחס לתכנון בסך ${formatILS(numericForecast - numericActual)}`
+      : 'חריגה מהתקציב שנקבע'
     : isUnderBudget
-      ? `יתרת תקציב ע"ס ${formatILS(numericForecast - numericActual)}`
+      ? isIncome
+        ? `עודף ביחס לתכנון בסך ${formatILS(numericActual - numericForecast)}`
+        : `יתרת תקציב ע"ס ${formatILS(numericForecast - numericActual)}`
       : null;
 
   const handleForecastBlur = async () => {
     if (currentForecastDraft === item.currentForecast) return;
+
+    // Cleared to empty — explicitly clear the override (send `null`), not
+    // `Number('') === 0`, which would silently save a zero override instead
+    // of removing it.
+    if (currentForecastDraft.trim() === '') {
+      setForecastSaveState('saving');
+      try {
+        await onCommit(item.budgetItemId, { forecastOverride: null });
+        setForecastSaveState('idle');
+      } catch (err) {
+        console.error('Error clearing forecast override:', err);
+        setForecastSaveState('error');
+      }
+      return;
+    }
+
     const num = Number(currentForecastDraft);
     if (!Number.isFinite(num)) {
       setCurrentForecastDraft(item.currentForecast);
@@ -80,7 +101,22 @@ export default function BudgetLineItemRow({ item, onCommit }: BudgetLineItemRowP
 
   const handleActualBlur = async () => {
     if (actualDraft === (item.actual ?? '')) return;
-    if (actualDraft.trim() === '') return;
+
+    // Cleared to empty — explicitly clear the actual (send `null`) rather
+    // than silently no-op, which previously left the stale value persisted
+    // on the server while the input looked empty until the next reload.
+    if (actualDraft.trim() === '') {
+      setActualSaveState('saving');
+      try {
+        await onCommit(item.budgetItemId, { actual: null });
+        setActualSaveState('idle');
+      } catch (err) {
+        console.error('Error clearing actual:', err);
+        setActualSaveState('error');
+      }
+      return;
+    }
+
     const num = Number(actualDraft);
     if (!Number.isFinite(num)) {
       setActualDraft(item.actual ?? '');
@@ -97,20 +133,20 @@ export default function BudgetLineItemRow({ item, onCommit }: BudgetLineItemRowP
   };
 
   return (
-    <div className="grid grid-cols-1 md:grid-cols-[2fr_1fr_1fr_1fr] gap-3 md:items-start px-3 py-3 rounded-xl bg-slate-50/60 border border-slate-100">
+    <div className="grid grid-cols-1 md:grid-cols-[2fr_1fr_1fr_1.4fr] gap-3 md:items-start px-3 py-3 rounded-xl bg-slate-50/60 border border-slate-100">
       <div className="flex items-center">
         <span className="body-text-sm text-primary truncate">{item.description}</span>
       </div>
 
       <div>
-        <span className="label-text block mb-1 md:hidden">תחזית בסיס</span>
-        <span dir="ltr" className="body-text-sm tabular-nums text-slate-500 block">
+        <span className="label-text block mb-1 md:hidden">תכנון ראשוני</span>
+        <span dir="ltr" className="body-text-sm tabular-nums text-slate-500 block text-right">
           {formatILS(Number(item.baselineForecast) || 0)}
         </span>
       </div>
 
       <div>
-        <span className="label-text block mb-1 md:hidden">תחזית נוכחית</span>
+        <span className="label-text block mb-1 md:hidden">תכנון חודשי</span>
         <input
           type="text"
           inputMode="decimal"
@@ -118,16 +154,16 @@ export default function BudgetLineItemRow({ item, onCommit }: BudgetLineItemRowP
           value={currentForecastDraft}
           onChange={(e) => setCurrentForecastDraft(e.target.value)}
           onBlur={handleForecastBlur}
-          aria-label="תחזית נוכחית"
+          aria-label="תכנון חודשי"
           className={INPUT_CLASS}
         />
         {forecastSaveState === 'error' && (
-          <p className="body-text-sm text-rose-500 mt-1">שגיאה בשמירה, נסה שוב</p>
+          <p className="text-xs text-rose-500 mt-1">שגיאה בשמירה, נסה שוב</p>
         )}
       </div>
 
       <div>
-        <span className="label-text block mb-1 md:hidden">בפועל</span>
+        <span className="label-text block mb-1 md:hidden">ביצוע בפועל</span>
         <input
           type="text"
           inputMode="decimal"
@@ -136,12 +172,12 @@ export default function BudgetLineItemRow({ item, onCommit }: BudgetLineItemRowP
           onChange={(e) => setActualDraft(e.target.value)}
           onBlur={handleActualBlur}
           placeholder="—"
-          aria-label="בפועל"
+          aria-label="ביצוע בפועל"
           className={`${INPUT_CLASS} ${actualInputClass}`}
         />
         {subtext && (
           <p
-            className={`body-text-sm mt-1 ${
+            className={`text-xs mt-1 ${
               isExceedance ? 'text-rose-500' : 'text-emerald-600'
             }`}
           >
@@ -149,7 +185,7 @@ export default function BudgetLineItemRow({ item, onCommit }: BudgetLineItemRowP
           </p>
         )}
         {actualSaveState === 'error' && (
-          <p className="body-text-sm text-rose-500 mt-1">שגיאה בשמירה, נסה שוב</p>
+          <p className="text-xs text-rose-500 mt-1">שגיאה בשמירה, נסה שוב</p>
         )}
       </div>
     </div>
