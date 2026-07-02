@@ -48,4 +48,8 @@ export const ENDPOINTS = {
   budgetExecutions: {
     base: 'budget-executions',
   },
+  assetLiabilityItems: {
+    base: 'asset-liability-items',
+    debtOverview: 'asset-liability-items/debt-overview',
+  },
 } as const;

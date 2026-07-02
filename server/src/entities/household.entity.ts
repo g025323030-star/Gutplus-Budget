@@ -9,6 +9,7 @@ import {
   UpdateDateColumn,
 } from 'typeorm';
 import { Account } from './account.entity';
+import { AssetLiabilityItem } from './asset-liability-item.entity';
 import { BudgetItem } from './budget-item.entity';
 import { Category } from './category.entity';
 import { FamilyMember } from './family-member.entity';
@@ -55,4 +56,7 @@ export class Household {
 
   @OneToMany(() => BudgetItem, budgetItem => budgetItem.household)
   budgetItems!: BudgetItem[];
+
+  @OneToMany(() => AssetLiabilityItem, item => item.household)
+  assetLiabilityItems!: AssetLiabilityItem[];
 }

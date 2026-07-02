@@ -182,14 +182,14 @@ export default function SnapshotSummaryCards({ summary }: SnapshotSummaryCardsPr
 
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         <FigureCard
-          label="הכנסות"
+          label="הכנסות - כמה אנחנו מכניסים"
           value={figures.income}
           caption={figures.incomeCaption}
           icon={<TrendingUp className="text-green-500" size={20} strokeWidth={ICON_STROKE} />}
           valueClassName="text-green-600"
         />
         <FigureCard
-          label="הוצאות"
+          label="הוצאות - כמה הבית שלנו עולה"
           value={figures.expenses}
           caption={figures.expenseCaption}
           icon={<TrendingDown className="text-red-500" size={20} strokeWidth={ICON_STROKE} />}

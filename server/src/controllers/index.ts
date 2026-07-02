@@ -2,6 +2,7 @@ export { householdController } from './household.controller';
 export { userController } from './user.controller';
 export { tokenController } from './token.controller';
 export { accountController } from './account.controller';
+export { assetLiabilityItemController } from './asset-liability-item.controller';
 export { categoryController } from './category.controller';
 export { familyMemberController } from './family-member.controller';
 export { budgetItemController } from './budget-item.controller';

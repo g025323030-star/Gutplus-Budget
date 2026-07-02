@@ -3,6 +3,7 @@ export * from './users.schemas';
 export * from './tokens.schemas';
 export * from './households.schemas';
 export * from './accounts.schemas';
+export * from './asset-liability-items.schemas';
 export * from './categories.schemas';
 export * from './family-members.schemas';
 export * from './budget-items.schemas';

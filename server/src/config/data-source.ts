@@ -3,6 +3,7 @@ import 'dotenv/config';
 import * as path from 'path';
 import { DataSource } from 'typeorm';
 import { Account } from '../entities/account.entity';
+import { AssetLiabilityItem } from '../entities/asset-liability-item.entity';
 import { BudgetItem } from '../entities/budget-item.entity';
 import { BudgetItemExecution } from '../entities/budget-item-execution.entity';
 import { Category } from '../entities/category.entity';
@@ -32,6 +33,7 @@ export const AppDataSource = new DataSource({
   logging: !isProduction,
   entities: [
     Account,
+    AssetLiabilityItem,
     BudgetItem,
     BudgetItemExecution,
     Category,

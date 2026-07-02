@@ -15,6 +15,7 @@ import {
   summaryRoutes,
   forecastRoutes,
   budgetItemExecutionRoutes,
+  assetLiabilityItemRoutes,
 } from './routes';
 import { errorHandler } from './middlewares';
 import { rollingTokenMiddleware } from './middlewares/referenceToken';
@@ -63,6 +64,7 @@ app.use(`${API_PREFIX}/${ENDPOINTS.budgetItems.base}`, authGuard, budgetItemRout
 app.use(`${API_PREFIX}/${ENDPOINTS.summary.base}`, authGuard, summaryRoutes);
 app.use(`${API_PREFIX}/${ENDPOINTS.budgetForecast.base}`, authGuard, forecastRoutes);
 app.use(`${API_PREFIX}/${ENDPOINTS.budgetExecutions.base}`, authGuard, budgetItemExecutionRoutes);
+app.use(`${API_PREFIX}/${ENDPOINTS.assetLiabilityItems.base}`, authGuard, assetLiabilityItemRoutes);
 
 // Health check
 app.get('/health', async (req, res) => {

@@ -8,6 +8,8 @@ import ExpensesPage from './pages/ExpensesPage';
 import IncomePage from './pages/IncomePage';
 import BudgetPlannerContainer from './pages/BudgetPlanner/BudgetPlannerContainer';
 import WelcomePage from './pages/WelcomePage';
+import AssetsLiabilitiesPage from './pages/AssetsLiabilitiesPage';
+import AssetLiabilitySuggestionsPage from './pages/AssetLiabilitySuggestionsPage';
 import './styles/index.css';
 
 function App() {
@@ -25,6 +27,8 @@ function App() {
               <Route path="/expenses" element={<ExpensesPage />} />
               <Route path="/income" element={<IncomePage />} />
               <Route path="/budget" element={<BudgetPlannerContainer />} />
+              <Route path="/assets-liabilities" element={<AssetsLiabilitiesPage />} />
+              <Route path="/assets-liabilities/suggestions" element={<AssetLiabilitySuggestionsPage />} />
             </Route>
             <Route path="/dashboard" element={<Navigate to="/snapshot" replace />} />
             <Route path="/" element={<Navigate to="/snapshot" replace />} />

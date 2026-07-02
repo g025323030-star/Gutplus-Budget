@@ -6,6 +6,7 @@ import {
   TrendingDown,
   TrendingUp,
   Wallet,
+  Scale,
   LogOut,
   X,
   type LucideIcon,
@@ -34,6 +35,7 @@ const NAV_ITEMS: ReadonlyArray<NavItem> = [
   { to: '/expenses', label: 'הוצאות', icon: TrendingDown },
   { to: '/income', label: 'הכנסות', icon: TrendingUp },
   { to: '/budget', label: 'דף התקציב', icon: Wallet },
+  { to: '/assets-liabilities', label: 'נכסים מול התחייבויות', icon: Scale },
 ];
 
 interface SidebarItemContentProps {

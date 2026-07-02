@@ -40,7 +40,9 @@
       "Bash(cat shared/src/index.ts)",
       "Bash(grep -E \"^/Users.*\\\\.tsx?$|BudgetPlanner|execution\\\\.service\")",
       "Bash(git merge --no-ff feat/budget-execution-ui-phase3 -m ' *)",
-      "Bash(grep -rn \"categoryId: null\\\\|categoryId,$\\\\|categoryId:\" client/src/components/budget-items/BudgetItemTable.tsx)"
+      "Bash(grep -rn \"categoryId: null\\\\|categoryId,$\\\\|categoryId:\" client/src/components/budget-items/BudgetItemTable.tsx)",
+      "Bash(npx ts-node -e ' *)",
+      "Bash(TS_NODE_TRANSPILE_ONLY=true npx ts-node -e ' *)"
     ],
     "additionalDirectories": [
       "/Users/avivmali/Documents/Gutplus-Budget-worktrees/execution-layer-phase1/shared/src/schemas",

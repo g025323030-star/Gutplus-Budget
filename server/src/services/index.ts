@@ -1,6 +1,7 @@
 export { householdService } from './household.service';
 export { userService } from './user.service';
 export { accountService } from './account.service';
+export { assetLiabilityItemService } from './asset-liability-item.service';
 export { categoryService } from './category.service';
 export { familyMemberService } from './family-member.service';
 export { tokenService } from './token.service';
