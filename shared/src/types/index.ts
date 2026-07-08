@@ -2,6 +2,7 @@ export * from './user.types';
 export * from './household.types';
 export * from './family-member.types';
 export * from './account.types';
+export * from './asset-liability-item.types';
 export * from './category.types';
 export * from './budget-item.types';
 export * from './budget-item-execution.types';

@@ -659,6 +659,8 @@ describe('SummaryService.computeSummary', () => {
         ],
       },
       debtRepayments: 0,
+      debtRepaymentsMonthly: 0,
+      debtRepaymentsYearly: 0,
       balanceBeforeDebts: 0,
       balanceAfterDebts: 0,
     });

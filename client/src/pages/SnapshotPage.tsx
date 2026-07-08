@@ -1,100 +1,15 @@
 import { useEffect, useMemo, useState } from 'react';
-import {
-  AlertCircle,
-  LayoutDashboard,
-  Scale,
-  TrendingDown,
-  TrendingUp,
-} from 'lucide-react';
+import { AlertCircle, LayoutDashboard } from 'lucide-react';
 import type { BudgetItem, Category, MonthlySummary } from '@gutplus/shared';
 import { ICON_STROKE } from '../constants/ui';
 import { getBudgetItems } from '../services/budget-items.service';
 import { getCategories } from '../services/categories.service';
-import { getSummary, getAnnualSummary } from '../services/summary.service';
-import type { AnnualSummary } from '../services/summary.service';
+import { getSummary } from '../services/summary.service';
 import PeriodToggle from '../components/snapshot/PeriodToggle';
 import type { PeriodMode } from '../components/snapshot/PeriodToggle';
-import SnapshotMonthlyOverview from '../components/snapshot/SnapshotMonthlyOverview';
+import SnapshotSummaryCards from '../components/snapshot/SnapshotSummaryCards';
 import CategoryPieChart from '../components/snapshot/CategoryPieChart';
 import TransactionsList from '../components/snapshot/TransactionsList';
-
-const currencyFormatter = new Intl.NumberFormat('he-IL', {
-  style: 'currency',
-  currency: 'ILS',
-  maximumFractionDigits: 0,
-});
-const formatILS = (value: number): string => currencyFormatter.format(value);
-
-interface AnnualKpiCardProps {
-  label: string;
-  value: number;
-  icon: React.ReactNode;
-  valueClassName: string;
-}
-
-// A single macro card — matches BudgetKpiCards.tsx's KpiCard visual pattern
-// (label + icon header, one bold figure), without importing from BudgetPlanner/.
-function AnnualKpiCard({ label, value, icon, valueClassName }: AnnualKpiCardProps) {
-  return (
-    <div className="bg-surface rounded-2xl shadow-sm border border-slate-100 p-6 transition-all duration-300 hover:shadow-md">
-      <div className="flex items-center justify-between mb-3">
-        <span className="label-text">{label}</span>
-        {icon}
-      </div>
-      <p className={`heading-3 ${valueClassName}`}>{formatILS(value)}</p>
-    </div>
-  );
-}
-
-interface AnnualSummaryCardsProps {
-  summary: AnnualSummary;
-}
-
-// Strictly 3 macro cards — Total Income / Annual Expenses / Net Balance —
-// sourced from the existing AnnualSummary shape. Debt repayments are folded
-// into "Net Balance" (balanceAfterDebts already nets them out) rather than
-// shown as a separate 4th card; they remain visible in the monthly overview.
-function AnnualSummaryCards({ summary }: AnnualSummaryCardsProps) {
-  const balanceClass =
-    summary.balanceAfterDebts >= 0 ? 'text-green-500' : 'text-red-500';
-
-  return (
-    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-      <AnnualKpiCard
-        label="סך הכנסות שנתיות"
-        value={summary.totalIncome}
-        icon={
-          <TrendingUp
-            className="text-green-500"
-            size={22}
-            strokeWidth={ICON_STROKE}
-          />
-        }
-        valueClassName="text-green-500"
-      />
-      <AnnualKpiCard
-        label="הוצאות שנתיות"
-        value={summary.totalExpenses}
-        icon={
-          <TrendingDown
-            className="text-red-500"
-            size={22}
-            strokeWidth={ICON_STROKE}
-          />
-        }
-        valueClassName="text-red-500"
-      />
-      <AnnualKpiCard
-        label="יתרה שנתית נטו"
-        value={summary.balanceAfterDebts}
-        icon={
-          <Scale className="text-accent" size={22} strokeWidth={ICON_STROKE} />
-        }
-        valueClassName={balanceClass}
-      />
-    </div>
-  );
-}
 
 function LoadingSkeleton() {
   return (
@@ -166,7 +81,6 @@ export default function SnapshotPage() {
   const [transactions, setTransactions] = useState<BudgetItem[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
   const [summary, setSummary] = useState<MonthlySummary | null>(null);
-  const [annualSummary, setAnnualSummary] = useState<AnnualSummary | null>(null);
 
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
@@ -181,15 +95,14 @@ export default function SnapshotPage() {
       const queryMonth = mode === 'monthly' ? selectedMonth : undefined;
       const queryYear = selectedYear;
 
-      const summaryPromise =
-        mode === 'monthly'
-          ? getSummary(selectedMonth, selectedYear)
-          : getAnnualSummary(selectedYear);
-
+      // The summary cards always show the dry-average monthly figure for the
+      // current month — they have their own internal monthly/yearly/summary
+      // toggle that just selects a subset of this same MonthlySummary, so no
+      // separate annual fetch is needed regardless of the page's period mode.
       const [txResult, catsResult, summaryResult] = await Promise.allSettled([
         getBudgetItems(queryMonth, queryYear),
         getCategories(),
-        summaryPromise,
+        getSummary(selectedMonth, selectedYear),
       ]);
       if (cancelled) return;
 
@@ -212,17 +125,10 @@ export default function SnapshotPage() {
       }
 
       if (summaryResult.status === 'fulfilled') {
-        if (mode === 'monthly') {
-          setSummary(summaryResult.value as MonthlySummary);
-          setAnnualSummary(null);
-        } else {
-          setAnnualSummary(summaryResult.value as AnnualSummary);
-          setSummary(null);
-        }
+        setSummary(summaryResult.value);
       } else {
         console.error('Error loading summary:', summaryResult.reason);
         setSummary(null);
-        setAnnualSummary(null);
         setError('שגיאה בטעינת הנתונים. נסה לרענן את הדף.');
       }
 
@@ -260,9 +166,6 @@ export default function SnapshotPage() {
       <p className="body-text-sm leading-relaxed">
         סקירה כוללת של ההכנסות וההוצאות שלך — חודשית או שנתית.
       </p>
-
-      <PeriodToggle mode={mode} onModeChange={setMode} />
-
       {error && <ErrorBlock message={error} />}
 
       {isLoading ? (
@@ -270,12 +173,7 @@ export default function SnapshotPage() {
       ) : (
         !error && (
           <>
-            {mode === 'monthly' && summary && (
-              <SnapshotMonthlyOverview summary={summary} />
-            )}
-            {mode === 'yearly' && annualSummary && (
-              <AnnualSummaryCards summary={annualSummary} />
-            )}
+            {summary && <SnapshotSummaryCards summary={summary} />}
 
             {mode === 'monthly' && (
               <>
