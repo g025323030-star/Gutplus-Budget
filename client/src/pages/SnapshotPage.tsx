@@ -5,7 +5,6 @@ import { ICON_STROKE } from '../constants/ui';
 import { getBudgetItems } from '../services/budget-items.service';
 import { getCategories } from '../services/categories.service';
 import { getSummary } from '../services/summary.service';
-import PeriodToggle from '../components/snapshot/PeriodToggle';
 import type { PeriodMode } from '../components/snapshot/PeriodToggle';
 import SnapshotSummaryCards from '../components/snapshot/SnapshotSummaryCards';
 import CategoryPieChart from '../components/snapshot/CategoryPieChart';
@@ -73,7 +72,7 @@ const filterToPeriod = (
 
 export default function SnapshotPage() {
   const now = new Date();
-  const [mode, setMode] = useState<PeriodMode>('monthly');
+  const [mode] = useState<PeriodMode>('monthly');
   // No month/year picker — the page reflects the current period.
   const selectedMonth = now.getMonth() + 1;
   const selectedYear = now.getFullYear();
