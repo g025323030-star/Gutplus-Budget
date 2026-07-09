@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Scale, AlertCircle, Plus, CreditCard, ListPlus } from 'lucide-react';
+import { Scale, AlertCircle, Plus, ListPlus } from 'lucide-react';
 import { AssetSide, AssetLiabilityCategory, CurrencyCode } from '@gutplus/shared';
 import type { AssetLiabilityItem, DebtBudgetItemOverview, FamilyMember, MonthlySummary } from '@gutplus/shared';
 import { ICON_STROKE } from '../constants/ui';
